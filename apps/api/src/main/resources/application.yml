@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: api
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:default}
