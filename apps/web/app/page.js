@@ -1,6 +1,8 @@
 async function getHealth() {
+  const base = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_BASE || '/api';
+
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/health`, {
+    const res = await fetch(`${base}/health`, {
       cache: 'no-store',
     });
     if (!res.ok) return { status: `bad_status_${res.status}` };

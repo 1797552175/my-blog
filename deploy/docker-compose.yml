@@ -35,7 +35,8 @@ services:
       context: ../apps/web
       dockerfile: Dockerfile
     environment:
-      NEXT_PUBLIC_API_BASE: /api
+      NEXT_PUBLIC_API_BASE: /api # For client-side requests
+      INTERNAL_API_URL: http://api:8080 # For server-side requests
     depends_on:
       - api
 
