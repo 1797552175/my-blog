@@ -43,4 +43,5 @@ hs_err_pid*
 
 # ===== Docker =====
 **/*-local.yml
+deploy/docker-compose.proxy.local.yml
 

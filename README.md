@@ -91,6 +91,39 @@ docker compose -f my-blog/deploy/docker-compose.yml up -d db
 cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="3307"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="abc123"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
 ```
 
+---
+
+## 本地开发：切换使用哪个 DB（本地 DB / 服务器 DB（SSH 隧道））
+
+你当前本地后端使用环境变量连接数据库（`DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`），因此只要切换这些变量即可切换 DB。
+
+### 方案 A：使用本地 docker DB（默认）
+
+- DB 地址：`127.0.0.1:3307`（宿主机端口映射到容器 3306）
+- 启动本地 DB：见上面的 “1) 启动本地数据库（3307）”
+- 启动后端时设置：
+  - `DB_HOST=127.0.0.1`
+  - `DB_PORT=3307`
+
+### 方案 B：使用服务器 DB（SSH 隧道）
+
+你已经在 xshell 开了隧道：**本地监听 13306** -> **服务器 3306**。
+
+- DB 地址：`127.0.0.1:13306`
+- 启动后端时设置：
+  - `DB_HOST=127.0.0.1`
+  - `DB_PORT=13306`
+
+示例（Windows PowerShell，一行命令）：
+
+```powershell
+cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="13306"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="<server-db-password>"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
+```
+
+注意：
+- **密码一定要用服务器 DB 的真实密码**（否则会 `Access denied for user 'blog'...`）。
+- 隧道断开后，本地后端会连不上 DB（表现为接口 500/超时），先确认隧道是否仍在监听 `13306`。
+
 说明：
 - 确保这里的 `DB_PASSWORD` 和上一步启动 DB 使用的 `DB_PASSWORD` 一致。
 - 启动后 Hibernate 会根据实体自动建表/更新（`ddl-auto: update`）。
@@ -138,8 +171,21 @@ SHOW TABLES;
 
 - 服务器安装 Docker + Docker Compose
 - 对外开放 80（Nginx）
+- （可选）对外开放 443（后续上 HTTPS 用）
 
-### 配置环境变量（deploy/.env）
+### 1) 拉取代码到服务器
+
+建议把项目放在例如 `/opt/my-blog`：
+
+```bash
+cd /opt
+git clone <your-repo-url> my-blog
+cd my-blog
+```
+
+后续更新就用 `git pull`（见下方“服务器更新”）。
+
+### 2) 配置环境变量（deploy/.env）
 
 在服务器 `my-blog/deploy/` 目录创建 `.env`：
 
@@ -149,16 +195,94 @@ DB_ROOT_PASSWORD=your_strong_root_password
 JWT_SECRET=a_very_long_and_secure_secret_key_for_production
 ```
 
-### 启动
+说明：
+- **`.env` 不要提交到 git**（只提交 `config/env.example` 作为模板）。
+- 如果你改过 DB 密码，可能需要重置 DB 卷（见下方“重置数据库”）。
+
+### 3) 启动（首次部署）
 
 ```bash
-cd my-blog/deploy
-docker compose up -d
+cd /opt/my-blog/deploy
+docker compose up -d --build
 ```
 
 访问：
 - `http://<server-ip>/` 前端
 - `http://<server-ip>/api/health` 后端健康检查
+
+---
+
+## 服务器更新（代码/配置更新后的正确姿势）
+
+### A. 仅代码更新（最常用）
+
+```bash
+cd /opt/my-blog
+git pull
+
+cd deploy
+docker compose up -d --build
+docker compose ps
+curl -sS http://127.0.0.1/api/health
+```
+
+> `docker compose up -d --build` 会自动按需重建镜像并更新服务（不会清空 DB 数据卷）。
+
+### B. 改了 Nginx 配置（例如 `deploy/nginx/nginx.conf`）
+
+```bash
+cd /opt/my-blog/deploy
+docker compose up -d --build nginx
+```
+
+### C. 只更新后端 / 只更新前端
+
+```bash
+# 只更新 API
+cd /opt/my-blog/deploy
+docker compose up -d --build api
+
+# 只更新 Web
+docker compose up -d --build web
+```
+
+### D. 改了环境变量（deploy/.env）
+
+改完 `.env` 后建议重建对应服务：
+
+```bash
+cd /opt/my-blog/deploy
+docker compose up -d --build
+```
+
+### E. 重置数据库（危险：会清空数据）
+
+只有在 **DB 密码/初始化坏掉** 或你明确要清空数据时才用：
+
+```bash
+cd /opt/my-blog/deploy
+docker compose down -v
+docker compose up -d --build
+```
+
+---
+
+## Docker 构建网络问题（v2ray / 代理）怎么处理（推荐方案）
+
+原则：**线上 `docker-compose.yml` 不要写死本地代理地址**（例如 `host.docker.internal:10809`），否则在 Linux 服务器上很容易不可用。
+
+本项目的做法：
+- `deploy/docker-compose.yml`：不包含任何代理配置（线上安全）
+- 本地如果需要代理：创建 `deploy/docker-compose.proxy.local.yml`（已在 `.gitignore` 忽略，不会提交到线上）
+
+本地使用方式（叠加一个本地专用文件）：
+
+```bash
+cd my-blog/deploy
+docker compose -f docker-compose.yml -f docker-compose.proxy.local.yml up -d --build
+```
+
+你可以在 `deploy/docker-compose.proxy.local.yml` 里把 `HTTP_PROXY/HTTPS_PROXY` 改成你本地 v2ray 的代理地址。
 
 ---
 

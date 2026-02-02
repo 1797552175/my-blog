@@ -2,7 +2,8 @@ services:
   db:
     image: mariadb:11
     ports:
-      - "3307:3306" # <--- 添加这一行
+      # 宿主机端口映射：本地用 3307 访问容器内 3306（避免占用本机已有 3306）
+      - "3307:3306"
     environment:
       MARIADB_DATABASE: blog
       MARIADB_USER: blog
@@ -20,9 +21,6 @@ services:
     build:
       context: ../apps/api
       dockerfile: Dockerfile
-      args:
-        HTTP_PROXY: http://host.docker.internal:10809
-        HTTPS_PROXY: http://host.docker.internal:10809
     environment:
       SPRING_PROFILES_ACTIVE: docker
       DB_HOST: db
