@@ -1,5 +1,8 @@
 async function getHealth() {
-  const base = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_BASE || '/api';
+  const isServer = typeof window === 'undefined';
+  const base = isServer
+    ? (process.env.INTERNAL_API_URL || 'http://localhost:8080').replace(/\/$/, '') + '/api'
+    : (process.env.NEXT_PUBLIC_API_BASE || '/api');
 
   try {
     const res = await fetch(`${base}/health`, {
@@ -11,6 +14,8 @@ async function getHealth() {
     return { status: 'error' };
   }
 }
+
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const health = await getHealth();

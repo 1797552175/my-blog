@@ -1,0 +1,46 @@
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+
+# ===== Env / Secrets =====
+.env
+.env.*
+!.env.example
+config/env.local
+config/.env
+config/.env.*
+
+# ===== Java / Gradle / Spring Boot =====
+**/build/
+**/out/
+**/.gradle/
+**/bin/
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# ===== Node / Next.js =====
+**/node_modules/
+**/.next/
+**/.turbo/
+**/dist/
+**/.cache/
+
+# Next.js standalone output (keep Dockerfiles & source, ignore generated)
+**/.next/standalone/
+**/.next/static/
+
+# ===== Docker =====
+**/*-local.yml
+

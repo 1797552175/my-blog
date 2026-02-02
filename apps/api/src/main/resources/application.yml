@@ -1,6 +1,40 @@
 spring:
   application:
-    name: api
+    name: api # Spring 应用名（用于日志、监控标识等）
 
   profiles:
+    # 当前激活的 profile（默认 default）
+    # - 本地直接跑：一般保持 default
+    # - Docker/服务器：由容器环境变量注入为 docker（见 deploy/docker-compose*.yml）
     active: ${SPRING_PROFILES_ACTIVE:default}
+
+  datasource:
+    # MariaDB 连接串（使用环境变量，方便本地/容器/服务器统一配置）
+    url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:blog}?useUnicode=true&characterEncoding=utf8
+    # 数据库用户名
+    username: ${DB_USER:root}
+    # 数据库密码（可为空；生产环境务必设置）
+    password: ${DB_PASSWORD:}
+    # JDBC 驱动
+    driver-class-name: org.mariadb.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # Hibernate 自动建表策略：
+      # - update：开发阶段方便（会自动更新表结构）
+      # - 生产环境建议改为 validate/none，并通过迁移工具（Flyway/Liquibase）管理
+      ddl-auto: update
+    # 关闭 Open Session in View，避免在 Controller/序列化阶段懒加载引发 N+1/事务问题
+    open-in-view: false
+
+# JWT 配置（用于登录后生成/校验 Token）
+jwt:
+  # JWT 签名密钥（强烈建议通过环境变量 JWT_SECRET 注入；生产必须是足够长的随机字符串）
+  secret: ${JWT_SECRET:please_change_me_please_change_me_please_change_me}
+  # Token 有效期（毫秒），默认 24h
+  expiration: ${JWT_EXPIRATION:86400000}
+
+# 日志级别（按需调整排查问题）
+logging:
+  level:
+    org.springframework.security: INFO

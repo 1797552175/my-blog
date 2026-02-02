@@ -1,19 +1,30 @@
 server:
+  # 容器内 Spring Boot 监听端口（与 nginx 反代 upstream api:8080 保持一致）
   port: 8080
 
 spring:
   datasource:
+    # Docker 环境下数据库连接（DB_HOST=db 指向 compose 里的 db 服务名）
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:blog}?useUnicode=true&characterEncoding=utf8
     username: ${DB_USER:blog}
     password: ${DB_PASSWORD:}
   jpa:
     hibernate:
+      # 容器环境同样使用 update 方便演示；生产建议改为 validate/none
       ddl-auto: update
     properties:
       hibernate:
+        # 指定 MariaDB 方言（避免 Hibernate 自动识别不准确）
         dialect: org.hibernate.dialect.MariaDBDialect
     open-in-view: false
 
+jwt:
+  # 从环境变量注入，避免把密钥写进镜像/仓库
+  secret: ${JWT_SECRET:please_change_me_please_change_me_please_change_me}
+  # Token 有效期（毫秒），默认 24h
+  expiration: 86400000
+
 logging:
   level:
+    # 安全相关日志：INFO 足够；排查鉴权问题时可临时改为 DEBUG
     org.springframework.security: INFO
