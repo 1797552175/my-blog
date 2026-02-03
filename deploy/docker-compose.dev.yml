@@ -1,3 +1,6 @@
+# 本地开发用：API/Web 热更新（gradle bootRun + npm run dev）
+# 不会自动加载，需显式指定：docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 服务器部署请只用 docker-compose.yml，不要加本文件，否则 api 会以开发模式运行并可能退出
 services:
   api:
     build:

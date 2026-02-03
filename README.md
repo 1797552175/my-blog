@@ -64,8 +64,6 @@ my-blog/
 
 ## 本地开发（推荐模式：本地前后端 + 本地 DB 3307）
 
-这是目前验证可用的开发模式：
-
 - 本地跑 Web（Next.js）
 - 本地跑 API（Spring Boot）
 - 本地用 docker 起 MariaDB，映射到 `3307`
@@ -153,6 +151,19 @@ npm install
 npm run dev
 ```
 
+### 本地 Docker 全栈（热更新，可选）
+
+若希望 **DB + API + Web 全在 Docker 里跑，且 API/Web 支持热更新**（改代码自动生效），在 `deploy` 目录执行：
+
+```bash
+cd my-blog/deploy
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+- `docker-compose.dev.yml` **不会自动加载**，必须显式加 `-f docker-compose.dev.yml`。
+- 效果：API 用 `gradle bootRun`、Web 用 `npm run dev`，源码挂载进容器，改完即生效。
+- **服务器部署不要加** `docker-compose.dev.yml`，否则 api 会以开发模式运行并可能退出；服务器只用 `-f docker-compose.yml`。
+
 ---
 
 ## Navicat 连接本地数据库（3307）
@@ -210,8 +221,11 @@ JWT_SECRET=a_very_long_and_secure_secret_key_for_production
 
 ```bash
 cd /opt/my-blog/deploy
-docker compose up -d --build
+docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml ps -a
 ```
+
+> **注意**：服务器只用 `docker-compose.yml`，不要加 `docker-compose.override.yml` 或 `docker-compose.dev.yml`，否则 api 会以开发模式（gradle bootRun）运行并可能退出。
 
 访问：
 - `http://<server-ip>/` 前端
@@ -228,18 +242,18 @@ cd /opt/my-blog
 git pull
 
 cd deploy
-docker compose up -d --build
-docker compose ps
+docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml ps
 curl -sS http://127.0.0.1/api/health
 ```
 
-> `docker compose up -d --build` 会自动按需重建镜像并更新服务（不会清空 DB 数据卷）。
+> `docker compose -f docker-compose.yml up -d --build` 会自动按需重建镜像并更新服务（不会清空 DB 数据卷）。服务器部署始终只指定 `-f docker-compose.yml`。
 
 ### B. 改了 Nginx 配置（例如 `deploy/nginx/nginx.conf`）
 
 ```bash
 cd /opt/my-blog/deploy
-docker compose up -d --build nginx
+docker compose -f docker-compose.yml up -d --build nginx
 ```
 
 ### C. 只更新后端 / 只更新前端
@@ -247,10 +261,10 @@ docker compose up -d --build nginx
 ```bash
 # 只更新 API
 cd /opt/my-blog/deploy
-docker compose up -d --build api
+docker compose -f docker-compose.yml up -d --build api
 
 # 只更新 Web
-docker compose up -d --build web
+docker compose -f docker-compose.yml up -d --build web
 ```
 
 ### D. 改了环境变量（deploy/.env）
@@ -259,7 +273,7 @@ docker compose up -d --build web
 
 ```bash
 cd /opt/my-blog/deploy
-docker compose up -d --build
+docker compose -f docker-compose.yml up -d --build
 ```
 
 ### E. 重置数据库（危险：会清空数据）
@@ -268,8 +282,8 @@ docker compose up -d --build
 
 ```bash
 cd /opt/my-blog/deploy
-docker compose down -v
-docker compose up -d --build
+docker compose -f docker-compose.yml down -v
+docker compose -f docker-compose.yml up -d --build
 ```
 
 ---
@@ -279,7 +293,8 @@ docker compose up -d --build
 原则：**线上 `docker-compose.yml` 不要写死本地代理地址**（例如 `host.docker.internal:10809`），否则在 Linux 服务器上很容易不可用。
 
 本项目的做法：
-- `deploy/docker-compose.yml`：不包含任何代理配置（线上安全）
+- `deploy/docker-compose.yml`：生产/服务器用，不包含任何代理配置（线上安全）
+- `deploy/docker-compose.dev.yml`：本地热更新（API gradle bootRun + Web npm run dev），**不会自动加载**，需显式 `-f docker-compose.dev.yml`；**服务器部署不要加此文件**，否则 api 会以开发模式运行并可能退出
 - 本地如果需要代理：创建 `deploy/docker-compose.proxy.local.yml`（已在 `.gitignore` 忽略，不会提交到线上）
 
 本地使用方式（叠加一个本地专用文件）：
