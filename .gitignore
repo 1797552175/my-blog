@@ -15,9 +15,8 @@ Desktop.ini
 .env
 .env.*
 !.env.example
-config/env.local
-config/.env
-config/.env.*
+!**/env.example
+config/
 
 # ===== Java / Gradle / Spring Boot =====
 **/build/

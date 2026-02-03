@@ -155,3 +155,14 @@ my-blog/
 - **全文搜索**：简单版（DB like/索引）或高级版（Meilisearch/Elastic）
 - **图片/附件存储**：本地卷、对象存储（OSS/S3）
 
+## 7.疑问
+### 为什么既有 config/ 又有 deploy/.env？
+
+| 位置 | 谁在用 | 用途 |
+|------|--------|------|
+| **config/env.example** | 人看 | 模板和说明，不要放真实密码。 |
+| **config/env.local** | 本地跑 API/Web 时 | 你在本机执行 `gradlew bootRun` / `npm run dev` 时，用这里的变量连数据库（可切换“本地 DB”或“服务器 DB 隧道”）。 |
+| **deploy/.env** | Docker Compose | 在 **deploy 目录**执行 `docker compose up` 时，Compose **只读当前目录的 .env**，不会去读 config/。所以服务器部署（或本地用 compose 起全栈）必须在 **deploy/** 下建 .env。 |
+
+总结：**config/** 给「本机直接跑进程」用，**deploy/.env** 给「docker compose」用，两套互不替代。
+
