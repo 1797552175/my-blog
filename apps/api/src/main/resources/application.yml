@@ -19,6 +19,7 @@ spring:
     driver-class-name: org.mariadb.jdbc.Driver
 
   jpa:
+    database-platform: org.hibernate.dialect.MariaDBDialect
     hibernate:
       # Hibernate 自动建表策略：
       # - update：开发阶段方便（会自动更新表结构）

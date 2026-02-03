@@ -56,7 +56,7 @@ my-blog/
 ### 本地两种连库方式（config/env.local）
 
 - **方案 A：连本地 Docker 的 DB** — `DB_HOST=127.0.0.1`，`DB_PORT=3307`（宿主机 3307 映射到容器 3306）。
-- **方案 B：连服务器上的 DB（通过 SSH 隧道）** — 隧道例如本地 `13306` → 服务器 `3306`，则 `DB_HOST=127.0.0.1`，`DB_PORT=13306`，密码用服务器 DB 的密码。
+- **方案 B：连服务器上的 DB（通过 SSH 隧道）** — 服务器上 DB 映射为宿主机 `3307`（docker 3307:3306），隧道应为本地 `13306` → 服务器 `3307`，则 `DB_HOST=127.0.0.1`，`DB_PORT=13306`，密码用服务器 DB 的密码。
 
 切换方式：改 `config/env.local` 里的 `DB_PORT`（3307 或 13306），然后按 README 用该文件里的变量启动后端即可。
 
@@ -112,7 +112,7 @@ cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse 
 
 ### 方案 B：使用服务器 DB（SSH 隧道）
 
-你已经在 xshell 开了隧道：**本地监听 13306** -> **服务器 3306**。
+在 xshell/终端开隧道：**本地监听 13306** -> **服务器 3307**（服务器上 DB 在宿主机 3307，见 deploy docker-compose）。命令示例：`ssh -L 13306:127.0.0.1:3307 root@服务器IP`
 
 - DB 地址：`127.0.0.1:13306`
 - 启动后端时设置：
@@ -122,7 +122,7 @@ cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse 
 示例（Windows PowerShell，一行命令）：
 
 ```powershell
-cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="13306"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="<server-db-password>"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
+cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="13306"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="abc123"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
 ```
 
 注意：
