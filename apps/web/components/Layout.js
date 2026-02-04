@@ -53,6 +53,7 @@ export default function Layout({ children }) {
   const navLinks = [
     { name: '首页', href: '/' },
     { name: '文章', href: '/posts' },
+    { name: '搜索', href: '/search' },
   ];
 
   if (!isMounted) {
@@ -121,6 +122,11 @@ export default function Layout({ children }) {
                       </Menu.Item>
                       <Menu.Item>
                         {({ active }) => (
+                          <Link href="/me/settings" className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200')}>账号设置</Link>
+                        )}
+                      </Menu.Item>
+                      <Menu.Item>
+                        {({ active }) => (
                           <button onClick={handleLogout} className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'w-full text-left block px-4 py-2 text-sm text-gray-700 dark:text-gray-200')}>退出登录</button>
                         )}
                       </Menu.Item>
@@ -164,6 +170,7 @@ export default function Layout({ children }) {
                 <div className="px-2 space-y-1">
                     <Link href="/write" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>写文章</Link>
                     <Link href="/me/posts" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>我的文章</Link>
+                    <Link href="/me/settings" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>账号设置</Link>
                     <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300">退出登录</button>
                 </div>
               ) : (
@@ -177,7 +184,7 @@ export default function Layout({ children }) {
         </Transition>
       </header>
 
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
         {children}
       </main>
 

@@ -28,6 +28,17 @@ spring:
     # 关闭 Open Session in View，避免在 Controller/序列化阶段懒加载引发 N+1/事务问题
     open-in-view: false
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# AI 配置（OpenAI 兼容接口）
+ai:
+  api-url: ${AI_API_URL:https://api.openai.com/v1/chat/completions}
+  api-key: ${AI_API_KEY:}
+  model: ${AI_MODEL:gpt-4o-mini}
+
 # JWT 配置（用于登录后生成/校验 Token）
 jwt:
   # JWT 签名密钥（强烈建议通过环境变量 JWT_SECRET 注入；生产必须是足够长的随机字符串）

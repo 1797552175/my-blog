@@ -1,20 +1,23 @@
 package com.example.api.auth;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.api.auth.dto.AuthResponse;
+import com.example.api.auth.dto.ChangePasswordRequest;
 import com.example.api.auth.dto.LoginRequest;
 import com.example.api.auth.dto.RegisterRequest;
+import com.example.api.auth.dto.UpdateProfileRequest;
+import com.example.api.auth.dto.UserMeResponse;
 import com.example.api.common.ApiException;
 import com.example.api.security.JwtTokenProvider;
 import com.example.api.user.User;
@@ -26,17 +29,14 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AuthController(
-            AuthenticationManager authenticationManager,
             JwtTokenProvider jwtTokenProvider,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder) {
-        this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -46,10 +46,10 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public void register(@Valid @RequestBody RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
-            throw new ApiException(HttpStatus.CONFLICT, "username_taken");
+            throw new ApiException(HttpStatus.CONFLICT, "用户名已被使用");
         }
         if (userRepository.existsByEmail(request.email())) {
-            throw new ApiException(HttpStatus.CONFLICT, "email_taken");
+            throw new ApiException(HttpStatus.CONFLICT, "邮箱已被使用");
         }
 
         User user = new User(request.username(), request.email(), passwordEncoder.encode(request.password()));
@@ -58,13 +58,76 @@ public class AuthController {
 
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        try {
-            Authentication auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.username(), request.password()));
-            String token = jwtTokenProvider.generateToken((org.springframework.security.core.userdetails.UserDetails) auth.getPrincipal());
-            return new AuthResponse(token, request.username());
-        } catch (BadCredentialsException e) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "bad_credentials");
+        User user = userRepository.findByUsername(request.username()).orElse(null);
+        if (user == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "账户未注册");
         }
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "密码错误");
+        }
+        String token = jwtTokenProvider.generateToken(user);
+        return new AuthResponse(token, request.username());
+    }
+
+    @GetMapping("/me")
+    public UserMeResponse me() {
+        User user = currentUser();
+        return new UserMeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPersonaPrompt(),
+                user.isPersonaEnabled());
+    }
+
+    @PutMapping("/me")
+    public UserMeResponse updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        User user = currentUser();
+        boolean changed = false;
+        if (request.email() != null && !request.email().isBlank()) {
+            if (!request.email().equals(user.getEmail()) && userRepository.existsByEmail(request.email())) {
+                throw new ApiException(HttpStatus.CONFLICT, "邮箱已被使用");
+            }
+            user.setEmail(request.email());
+            changed = true;
+        }
+        if (request.personaPrompt() != null) {
+            user.setPersonaPrompt(request.personaPrompt().isBlank() ? null : request.personaPrompt().trim());
+            changed = true;
+        }
+        if (request.personaEnabled() != null) {
+            user.setPersonaEnabled(request.personaEnabled());
+            changed = true;
+        }
+        if (changed) {
+            userRepository.save(user);
+        }
+        return new UserMeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPersonaPrompt(),
+                user.isPersonaEnabled());
+    }
+
+    @PutMapping("/me/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        User user = currentUser();
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "当前密码错误");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+    }
+
+    private User currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+        String username = ((org.springframework.security.core.userdetails.UserDetails) auth.getPrincipal()).getUsername();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "请先登录"));
     }
 }

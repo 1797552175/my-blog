@@ -37,7 +37,7 @@ public class Post extends BaseEntity {
     @Column(nullable = false)
     private boolean published;
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "post_tags", joinColumns = @JoinColumn(name = "post_id"))
     @Column(name = "tag", nullable = false)
     private List<String> tags = new ArrayList<>();
@@ -95,6 +95,14 @@ public class Post extends BaseEntity {
 
     public void setAuthor(User author) {
         this.author = author;
+    }
+
+    public List<String> getTags() {
+        return tags;
+    }
+
+    public void setTags(List<String> tags) {
+        this.tags = tags != null ? tags : new ArrayList<>();
     }
 
 }

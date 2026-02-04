@@ -50,7 +50,7 @@ function safeJson(text) {
 
 export const api = {
   get: (path) => request(path, { method: 'GET' }),
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
+  post: (path, body, options = {}) => request(path, { method: 'POST', body: JSON.stringify(body), ...options }),
   put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
   del: (path) => request(path, { method: 'DELETE' }),
 };

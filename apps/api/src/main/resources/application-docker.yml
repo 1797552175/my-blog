@@ -3,6 +3,9 @@ server:
   port: 8080
 
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
   datasource:
     # Docker 环境下数据库连接（DB_HOST=db 指向 compose 里的 db 服务名）
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:blog}?useUnicode=true&characterEncoding=utf8

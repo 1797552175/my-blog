@@ -48,6 +48,11 @@ my-blog/
 - `DB_USER`（默认 `root`）
 - `DB_PASSWORD`（默认空）
 - `JWT_SECRET`（JWT 密钥，生产必须设置长随机字符串）
+- **AI 功能**（可选，不设则首页灵感对话与作者分身不可用）：
+  - `AI_API_URL`（默认 `https://api.openai.com/v1/chat/completions`，可改为 DeepSeek 等兼容地址）
+  - `AI_API_KEY`（大模型 API Key，生产必须通过环境变量注入，勿提交仓库）
+  - `AI_MODEL`（默认 `gpt-4o-mini`，对话与分身共用）
+- **Redis**（AI 分身对话上下文）：`REDIS_HOST`（默认 `localhost`）、`REDIS_PORT`（默认 `6379`）。本地开发若用 Docker 起 Redis，API 连 `127.0.0.1:6379`；服务器部署见 `deploy/docker-compose.yml`，API 依赖 `redis` 服务。
 
 说明：
 - **本地开发**：推荐在 PowerShell 中临时设置环境变量后启动（不写入仓库文件）。
@@ -88,13 +93,23 @@ docker compose -f my-blog/deploy/docker-compose.yml up -d db
 > 注意：`docker-compose.yml` 里 DB 用户是 `blog`，并且会使用 `DB_PASSWORD` 创建/校验密码。
 > 如果你不设置 `DB_PASSWORD/DB_ROOT_PASSWORD`（或之前用不同密码启动过），后端会出现 `Access denied for user 'blog'...`，从而导致注册/登录/文章接口失败。
 
-#### 2) 启动本地后端（Spring Boot，连接本地 3307）
+#### 2) 启动本地后端（Spring Boot）
 
-在项目根目录执行（Windows PowerShell，一行命令）：
+**推荐**：执行脚本会自动从 `config/env.local` 读取环境变量后启动。
+
+- 若当前在**项目根目录**（think）：`.\my-blog\scripts\start-api.ps1`
+- 若当前已在 **my-blog** 目录：`.\scripts\start-api.ps1`
 
 ```powershell
-cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="3307"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="abc123"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
+cd C:\Users\huqicheng\Documents\think
+.\my-blog\scripts\start-api.ps1
 ```
+
+- 首次使用前：复制 `my-blog/config/env.example` 为 `my-blog/config/env.local`，按需填写 DB、JWT、AI、Redis 等变量。
+- 切换 DB（本地 3307 / 服务器隧道 13306）、启用 AI 等，只需改 `config/env.local`，无需改启动命令。
+- 若未设置 `JAVA_HOME`，可在 `config/env.local` 中增加一行：`JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`（路径按本机实际修改）。
+
+若需启用 **AI 灵感与作者分身**：在 `config/env.local` 中配置 `AI_API_KEY`、`REDIS_HOST`、`REDIS_PORT`，并先启动 Redis：`docker compose -f my-blog/deploy/docker-compose.yml up -d redis`。
 
 ---
 
@@ -119,11 +134,13 @@ cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse 
   - `DB_HOST=127.0.0.1`
   - `DB_PORT=13306`
 
-示例（Windows PowerShell，一行命令）：
+**启动方式**：与上面相同，使用脚本即可（脚本会读取 `config/env.local` 中的 `DB_PORT=13306` 等）：
 
 ```powershell
-cd C:\Users\huqicheng\Documents\think; $env:JAVA_HOME="C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot"; $env:PATH="$env:JAVA_HOME\bin;$env:PATH"; $env:DB_HOST="127.0.0.1"; $env:DB_PORT="13306"; $env:DB_NAME="blog"; $env:DB_USER="blog"; $env:DB_PASSWORD="abc123"; $env:JWT_SECRET="a-very-long-and-secure-secret-key-for-jwt"; .\my-blog\apps\api\gradlew.bat -p my-blog\apps\api bootRun --no-daemon
+.\my-blog\scripts\start-api.ps1
 ```
+
+只需在 `config/env.local` 里把 `DB_PORT` 设为 `13306`（并确保隧道已开、密码正确）。
 
 注意：
 - **密码一定要用服务器 DB 的真实密码**（否则会 `Access denied for user 'blog'...`）。
@@ -231,6 +248,8 @@ docker compose -f docker-compose.yml ps -a
 - `http://<server-ip>/` 前端
 - `http://<server-ip>/api/health` 后端健康检查
 
+若需启用 AI 功能，在 `deploy/.env` 中增加 `AI_API_KEY`（必填）、`AI_API_URL`、`AI_MODEL`（可选）；compose 已包含 `redis` 服务，API 会自动连接。
+
 ---
 
 ## 服务器更新（代码/配置更新后的正确姿势）
@@ -335,8 +354,31 @@ SHOW TABLES;
 
 ---
 
+## AI 功能与配置
+
+### 功能说明
+
+- **首页 AI 找灵感**：登录后在首页展开「AI 找灵感」面板，与 AI 多轮对话获取写作灵感，可点击「添加到灵感库」保存当前对话（可选标题）。
+- **写文章浏览灵感**：写文章页（`/write`）右侧「浏览灵感」侧栏，分页查看已保存灵感，点击某条可展开完整对话辅助写作。
+- **作者 AI 分身**：读者在文章列表（`/posts`）或文章详情（`/posts/[slug]`）可点击「与 TA 对话」/「与作者 AI 对话」，与该作者的 AI 分身多轮对话（无需登录）。分身结合作者在设置中填写的「分身提示词」与系统根据其已发布文章自动提炼的风格描述生成回复。
+
+### 配置入口
+
+| 用途 | 入口 | 说明 |
+|------|------|------|
+| **大模型 API（运维）** | 环境变量 | `AI_API_URL`、`AI_API_KEY`、`AI_MODEL`，在本地启动后端或 `deploy/.env` 中配置；详见上文「环境变量」。 |
+| **作者分身设定（用户）** | 账号设置 → AI 分身设定 | 登录后访问 `/me/settings`，在「AI 分身设定」中填写分身提示词、开启/关闭「AI 分身」；保存后读者端才会看到该作者的分身入口。 |
+
+### 使用前提
+
+- 后端已配置 `AI_API_KEY`（以及按需的 `AI_API_URL`、`AI_MODEL`）。
+- 本地开发或部署中已启动 Redis（分身对话上下文存 Redis；灵感库与首页对话存数据库）。
+
+---
+
 ## 常用命令速查
 
 - 启动本地 DB：`docker compose -f my-blog/deploy/docker-compose.yml up -d db`
+- 启动本地 DB + Redis（启用 AI 时）：`docker compose -f my-blog/deploy/docker-compose.yml up -d db redis`
 - 停止本地 DB：`docker compose -f my-blog/deploy/docker-compose.yml stop db`
 - 查看本地 DB 日志：`docker compose -f my-blog/deploy/docker-compose.yml logs -f db`

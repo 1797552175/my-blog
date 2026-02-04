@@ -1,3 +1,5 @@
+import HomeClient from './_homeClient';
+
 async function getHealth() {
   const isServer = typeof window === 'undefined';
   const base = isServer
@@ -21,10 +23,12 @@ export default async function Home() {
   const health = await getHealth();
 
   return (
-    <main style={{ fontFamily: 'system-ui', padding: 24 }}>
-      <h1>My Blog</h1>
-      <p>Web is running.</p>
-      <p>API health: {health.status}</p>
+    <main className="w-full p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="max-w-3xl mx-auto md:mx-0">
+        {/* <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 dark:text-zinc-100">My Blog</h1> */}
+        <p className="text-zinc-500 dark:text-zinc-400 mt-1 text-sm md:text-base">API 状态：{health.status}</p>
+      </div>
+      <HomeClient />
     </main>
   );
 }

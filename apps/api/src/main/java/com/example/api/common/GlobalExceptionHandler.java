@@ -29,29 +29,29 @@ public class GlobalExceptionHandler {
         Map<String, String> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
                 .collect(java.util.stream.Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage, (a, b) -> a));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                "error", "validation_failed",
+                "error", "请检查输入",
                 "fields", fieldErrors));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidJson() {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_json"));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "请求体格式错误"));
     }
 
     @ExceptionHandler({ BadCredentialsException.class })
     public ResponseEntity<Map<String, Object>> handleBadCredentials() {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "bad_credentials"));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "用户名或密码错误"));
     }
 
     @ExceptionHandler({ UsernameNotFoundException.class })
     public ResponseEntity<Map<String, Object>> handleUserNotFound() {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "user_not_found"));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "账户未注册"));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleOther(Exception ex) {
         log.error("500 internal_error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "error", "internal_error"));
+                "error", "服务器内部错误"));
     }
 }

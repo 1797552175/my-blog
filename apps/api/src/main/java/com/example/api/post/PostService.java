@@ -11,9 +11,19 @@ public interface PostService {
 
     Page<PostResponse> listPublished(Pageable pageable);
 
+    Page<PostResponse> listPublished(String tag, Pageable pageable);
+
+    Page<PostResponse> search(String q, Pageable pageable);
+
     Page<PostResponse> listMine(String username, Pageable pageable);
 
+    Page<PostResponse> listMine(String username, String tag, Pageable pageable);
+
+    java.util.List<String> listMyTags(String username);
+
     PostResponse getBySlug(String slug);
+
+    PostResponse getByIdForAuthor(String username, Long id);
 
     PostResponse create(String username, PostCreateRequest request);
 

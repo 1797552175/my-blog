@@ -24,24 +24,30 @@
 
 ### 2.2 模块与 API 一览
 
-| 模块     | 方法 | 路径                     | 认证 | 说明           |
-|----------|------|--------------------------|------|----------------|
-| 健康检查 | GET  | /api/health              | 否   | 存活探针       |
-| 认证     | POST | /api/auth/register       | 否   | 注册           |
-| 认证     | POST | /api/auth/login          | 否   | 登录           |
-| 文章     | GET  | /api/posts               | 否   | 分页列表(已发布) |
-| 文章     | GET  | /api/posts/slug/{slug}   | 否   | 按 slug 查详情 |
-| 文章     | GET  | /api/posts/me            | 是   | 当前用户文章列表 |
-| 文章     | POST | /api/posts               | 是   | 创建文章       |
-| 文章     | PUT  | /api/posts/{id}          | 是   | 更新文章       |
-| 文章     | DELETE | /api/posts/{id}        | 是   | 删除文章       |
+| 模块     | 方法 | 路径                        | 认证 | 说明               |
+|----------|------|-----------------------------|------|--------------------|
+| 健康检查 | GET  | /api/health                 | 否   | 存活探针           |
+| 认证     | POST | /api/auth/register          | 否   | 注册               |
+| 认证     | POST | /api/auth/login             | 否   | 登录               |
+| 标签     | GET  | /api/tags                   | 否   | 全站标签列表(含次数) |
+| 文章     | GET  | /api/posts                  | 否   | 分页列表(已发布)，支持 ?tag= |
+| 文章     | GET  | /api/posts/slug/{slug}      | 否   | 按 slug 查详情     |
+| 文章     | GET  | /api/posts/search           | 否   | 全文搜索，?q= 关键词 |
+| 文章     | GET  | /api/posts/{id}             | 是   | 作者获取单篇(编辑用) |
+| 文章     | GET  | /api/posts/me               | 是   | 当前用户文章列表   |
+| 文章     | POST | /api/posts                  | 是   | 创建文章           |
+| 文章     | PUT  | /api/posts/{id}             | 是   | 更新文章           |
+| 文章     | DELETE | /api/posts/{id}           | 是   | 删除文章           |
+| 评论     | GET  | /api/posts/{postId}/comments | 否   | 文章评论分页列表   |
+| 评论     | POST | /api/posts/{postId}/comments | 否   | 发表评论(登录/游客) |
 
 认证方式：除上述公开接口外，其余请求需在 Header 中携带 `Authorization: Bearer <token>`。
 
 ### 2.3 数据模型（简要）
 
 - **User**：用户名、邮箱、密码（加密存储）
-- **Post**：标题、slug、正文（Markdown）、是否发布、作者、创建/更新时间
+- **Post**：标题、slug、正文（Markdown）、是否发布、标签（tags）、作者、创建/更新时间
+- **Comment**：文章、用户（可选）、游客昵称/邮箱/网址、内容、创建时间
 
 接口请求/响应字段详见 [API 文档](API.md)。
 
@@ -102,7 +108,25 @@
 | post_id | BIGINT | 非空、联合主键之一、外键 | 文章 ID，关联 posts.id |
 | tag | VARCHAR(255) | 非空、联合主键之一 | 标签名（当前业务未使用，表结构已存在） |
 
-**说明**：当前前端与 API 未使用标签功能，仅表结构存在。
+**说明**：写/编文章时可设置 tags，列表支持按 tag 筛选。
+
+---
+
+### 3.4 comments（评论表）
+
+| 字段名 | 类型 | 约束 | 备注 |
+|--------|------|------|------|
+| id | BIGINT | 主键、自增 | 评论主键 |
+| created_at | TIMESTAMP | 非空、不可更新 | 创建时间 |
+| updated_at | TIMESTAMP | 非空 | 更新时间（BaseEntity） |
+| post_id | BIGINT | 非空、外键 | 文章 ID，关联 posts.id |
+| user_id | BIGINT | 可空、外键 | 登录用户 ID，空表示游客 |
+| guest_name | VARCHAR(64) | 可空 | 游客昵称 |
+| guest_email | VARCHAR(128) | 可空 | 游客邮箱 |
+| guest_url | VARCHAR(512) | 可空 | 游客网址 |
+| content | VARCHAR(2000) | 非空 | 评论内容（纯文本） |
+
+**索引**：post_id、created_at。**外键**：post_id → posts(id)，user_id → users(id)。
 
 ---
 
@@ -122,8 +146,9 @@
 | /register    | app/register/page.js    | 注册         | 否       |
 | /posts       | app/posts/page.js       | 文章列表     | 否       |
 | /posts/[slug]| app/posts/[slug]/page.js| 文章详情     | 否       |
-| /write       | app/write/page.js       | 写/发文章    | 是       |
-| /me/posts    | app/me/posts/page.js    | 我的文章     | 是       |
+| /write       | app/write/page.js       | 写/发文章（含标签）；?edit=id 为编辑 | 是       |
+| /me/posts    | app/me/posts/page.js    | 我的文章（含编辑/删除） | 是       |
+| /search      | app/search/page.js      | 搜索（?q= 关键词，摘要 120 字、空状态） | 否       |
 
 ### 4.3 前端与后端对应关系
 
@@ -131,12 +156,17 @@
 |----------------|-------------------------------------|
 | 登录           | POST /api/auth/login                |
 | 注册           | POST /api/auth/register             |
-| 文章列表       | GET /api/posts?page=&size=&sort=    |
-| 文章详情       | GET /api/posts/slug/{slug}          |
-| 我的文章       | GET /api/posts/me?page=&size=&sort= |
-| 创建文章       | POST /api/posts                     |
-| 更新文章       | PUT /api/posts/{id}                 |
-| 删除文章       | DELETE /api/posts/{id}               |
+| 文章列表       | GET /api/posts?page=&size=&sort=&tag= |
+| 文章详情       | GET /api/posts/slug/{slug}            |
+| 搜索           | GET /api/posts/search?q=&page=&size=  |
+| 我的文章       | GET /api/posts/me?page=&size=&sort=  |
+| 编辑预填       | GET /api/posts/{id}（作者）           |
+| 创建文章       | POST /api/posts（含 tags）           |
+| 更新文章       | PUT /api/posts/{id}（含 tags）       |
+| 删除文章       | DELETE /api/posts/{id}                |
+| 标签列表       | GET /api/tags                         |
+| 评论列表       | GET /api/posts/{postId}/comments      |
+| 发表评论       | POST /api/posts/{postId}/comments     |
 
 前端通过 `lib/api.js` 统一发请求，浏览器侧使用 `NEXT_PUBLIC_API_BASE`（如 /api），服务端 SSR 使用 `INTERNAL_API_URL` 直连后端。Token 存于 localStorage，请求时带 `Authorization: Bearer <token>`。
 

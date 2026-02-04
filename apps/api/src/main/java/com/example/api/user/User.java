@@ -25,6 +25,12 @@ public class User extends BaseEntity implements org.springframework.security.cor
     @Column(nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(name = "persona_prompt", columnDefinition = "TEXT", nullable = true)
+    private String personaPrompt;
+
+    @Column(name = "persona_enabled", nullable = false)
+    private boolean personaEnabled = true;
+
     protected User() {
     }
 
@@ -36,6 +42,10 @@ public class User extends BaseEntity implements org.springframework.security.cor
 
     public String getEmail() {
         return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getPasswordHash() {
@@ -79,6 +89,22 @@ public class User extends BaseEntity implements org.springframework.security.cor
     @Override
     public boolean isEnabled() {
         return true;
+    }
+
+    public String getPersonaPrompt() {
+        return personaPrompt;
+    }
+
+    public void setPersonaPrompt(String personaPrompt) {
+        this.personaPrompt = personaPrompt;
+    }
+
+    public boolean isPersonaEnabled() {
+        return personaEnabled;
+    }
+
+    public void setPersonaEnabled(boolean personaEnabled) {
+        this.personaEnabled = personaEnabled;
     }
 
 }
