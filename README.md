@@ -222,7 +222,15 @@ cd my-blog
 
 ### 2) 配置环境变量（deploy/.env）
 
-在服务器 `my-blog/deploy/` 目录创建 `.env`：
+在服务器 `my-blog/deploy/` 目录复制模板并编辑：
+
+```bash
+cd /opt/my-blog/deploy
+cp env.example .env
+# 编辑 .env，至少设置 DB_PASSWORD、DB_ROOT_PASSWORD、JWT_SECRET
+```
+
+必填项（与 `deploy/env.example` 一致）：
 
 ```env
 DB_PASSWORD=your_strong_password
@@ -230,8 +238,10 @@ DB_ROOT_PASSWORD=your_strong_root_password
 JWT_SECRET=a_very_long_and_secure_secret_key_for_production
 ```
 
+可选：AI 功能（首页灵感对话、作者分身）需在 `.env` 中增加 `AI_API_KEY`（必填）、`AI_API_URL`、`AI_MODEL`；不配置则 AI 不可用。Redis 由 docker-compose 自动起，无需在 `.env` 中配置。
+
 说明：
-- **`.env` 不要提交到 git**（只提交 `config/env.example` 作为模板）。
+- **`.env` 不要提交到 git**（模板见 `deploy/env.example`）。
 - 如果你改过 DB 密码，可能需要重置 DB 卷（见下方“重置数据库”）。
 
 ### 3) 启动（首次部署）
