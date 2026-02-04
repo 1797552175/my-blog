@@ -60,7 +60,7 @@ export default function MyPostsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto" style={{ width: '80%' }}>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">我的文章</h1>
         <Link className="btn" href="/write">

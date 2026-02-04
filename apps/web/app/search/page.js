@@ -32,7 +32,7 @@ export default async function SearchPage({ searchParams }) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6" style={{ width: '80%' }}>
       <h1 className="text-3xl font-bold mb-6">搜索</h1>
       <SearchForm defaultValue={q} className="mb-8" />
 

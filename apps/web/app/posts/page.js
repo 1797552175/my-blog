@@ -25,7 +25,7 @@ export default async function PostsPage({ searchParams: searchParamsProp }) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6" style={{ width: '80%' }}>
       <h1 className="text-3xl font-bold mb-8">文章列表</h1>
       {tag ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
