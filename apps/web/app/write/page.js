@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { createPost, updatePost, getPostById } from '../../services/posts';
+import { getById } from '../../services/inspirations';
 import { isAuthed } from '../../services/auth';
 import InspirationBrowser from '../../components/InspirationBrowser';
 
@@ -11,6 +12,7 @@ export default function WritePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit');
+  const inspirationId = searchParams.get('inspiration');
 
   const [title, setTitle] = useState('');
   const [contentMarkdown, setContentMarkdown] = useState('');
@@ -19,6 +21,7 @@ export default function WritePage() {
   const [tagInput, setTagInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadEdit, setLoadEdit] = useState(!!editId);
+  const [loadInspiration, setLoadInspiration] = useState(!!inspirationId && !editId);
   const [error, setError] = useState(null);
 
   const loadPost = useCallback(async () => {
@@ -31,11 +34,31 @@ export default function WritePage() {
       setPublished(post.published);
       setTags(Array.isArray(post.tags) ? [...post.tags] : []);
     } catch (err) {
-      setError(err?.data?.error || err?.message || '加载文章失败');
+      setError(err?.data?.error || err?.message || '加载小说失败');
     } finally {
       setLoadEdit(false);
     }
   }, [editId]);
+
+  const loadInspirationPrefill = useCallback(async () => {
+    if (!inspirationId || editId) return;
+    setError(null);
+    try {
+      const inspiration = await getById(inspirationId);
+      if (inspiration.title && inspiration.title.trim()) {
+        setTitle(inspiration.title.trim());
+      }
+      const messages = inspiration.messages || [];
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistant && lastAssistant.content && lastAssistant.content.trim()) {
+        setContentMarkdown((prev) => (prev ? prev : `## 灵感摘要\n\n${lastAssistant.content.trim()}`));
+      }
+    } catch (err) {
+      setError(err?.data?.error || err?.message || '加载灵感失败');
+    } finally {
+      setLoadInspiration(false);
+    }
+  }, [inspirationId, editId]);
 
   useEffect(() => {
     if (!isAuthed()) {
@@ -43,7 +66,8 @@ export default function WritePage() {
       return;
     }
     if (editId) loadPost();
-  }, [router, editId, loadPost]);
+    else if (inspirationId) loadInspirationPrefill();
+  }, [router, editId, inspirationId, loadPost, loadInspirationPrefill]);
 
   function addTag() {
     const t = tagInput.trim().slice(0, 64);
@@ -72,6 +96,7 @@ export default function WritePage() {
         await updatePost(editId, payload);
         router.push(`/me/posts`);
       } else {
+        if (inspirationId) payload.inspirationId = Number(inspirationId);
         const post = await createPost(payload);
         router.push(`/posts/${post.slug}`);
       }
@@ -87,8 +112,8 @@ export default function WritePage() {
     <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6">
       <div className="flex-1 min-w-0">
       <div className="card p-6">
-        <h1 className="text-2xl font-bold mb-1">{editId ? '编辑文章' : '写文章'}</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">内容支持 Markdown，右侧为实时预览。标签可自由输入，回车添加。</p>
+        <h1 className="text-2xl font-bold mb-1">{editId ? '编辑小说' : '写小说'}</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">内容支持 Markdown，右侧为实时预览。标签可自由输入，回车添加。可从右侧灵感库选择灵感开始创作。</p>
 
         {error ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -96,7 +121,7 @@ export default function WritePage() {
           </div>
         ) : null}
 
-        {loadEdit ? (
+        {(loadEdit || loadInspiration) ? (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">加载中…</div>
         ) : (
           <form className="space-y-4" onSubmit={onSubmit}>
@@ -171,7 +196,7 @@ export default function WritePage() {
             </div>
             <div className="flex gap-3">
               <button className="btn" disabled={loading}>
-                {loading ? '提交中…' : editId ? '保存' : '发布'}
+                {loading ? '提交中…' : editId ? '保存' : '发布小说'}
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => router.push(editId ? '/me/posts' : '/posts')}>
                 取消

@@ -50,7 +50,7 @@ export default function MyPostsPage() {
   }, [selectedTag]);
 
   async function onDelete(id) {
-    if (!confirm('确定要删除这篇文章吗？')) return;
+    if (!confirm('确定要删除这篇小说吗？')) return;
     try {
       await deletePost(id);
       await load(selectedTag);
@@ -62,9 +62,9 @@ export default function MyPostsPage() {
   return (
     <div className="max-w-4xl mx-auto" style={{ width: '80%' }}>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">我的文章</h1>
+        <h1 className="text-2xl font-bold">我的小说</h1>
         <Link className="btn" href="/write">
-          写文章
+          写小说
         </Link>
       </div>
 
@@ -102,7 +102,7 @@ export default function MyPostsPage() {
           {loading ? (
             <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">加载中…</div>
           ) : posts.length === 0 ? (
-            <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">还没有文章，去写一篇吧。</div>
+            <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">还没有小说，去写一篇吧。</div>
           ) : (
             posts.map((p) => (
               <div key={p.id} className="p-4 flex items-start justify-between gap-4">

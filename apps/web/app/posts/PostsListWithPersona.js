@@ -33,7 +33,7 @@ export default function PostsListWithPersona({ posts, tag, error }) {
     <>
       <div className="space-y-4">
         {posts.length === 0 ? (
-          <p className="text-gray-600 dark:text-zinc-400">暂无文章</p>
+          <p className="text-gray-600 dark:text-zinc-400">暂无小说</p>
         ) : (
           posts.map((post) => (
             <div key={post.id} className="border-b border-gray-200 dark:border-zinc-700 pb-4">
@@ -55,7 +55,7 @@ export default function PostsListWithPersona({ posts, tag, error }) {
                 {excerpt(post.contentMarkdown)}
               </p>
               <div className="text-sm text-gray-500 dark:text-zinc-400 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>发布于 {new Date(post.createdAt).toLocaleDateString()}</span>
+                <span>更新于 {new Date(post.createdAt).toLocaleDateString()}</span>
                 <span>作者：{post.authorUsername}</span>
                 {post.authorPersonaEnabled && post.authorId != null ? (
                   <button
@@ -63,7 +63,7 @@ export default function PostsListWithPersona({ posts, tag, error }) {
                     onClick={() => openPersona(post.authorId, post.authorUsername, null, null)}
                     className="text-indigo-600 dark:text-indigo-400 hover:underline"
                   >
-                    与 TA 对话
+                    与作者对话
                   </button>
                 ) : null}
               </div>

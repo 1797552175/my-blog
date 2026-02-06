@@ -9,6 +9,7 @@ public record PostCreateRequest(
         @NotBlank @Size(max = 200) String title,
         @NotBlank String contentMarkdown,
         boolean published,
-        List<@Size(max = 64) String> tags
+        List<@Size(max = 64) String> tags,
+        Long inspirationId
 ) {
 }

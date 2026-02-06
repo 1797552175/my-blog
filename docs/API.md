@@ -217,7 +217,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 | 字段            | 类型    | 说明           |
 |-----------------|---------|----------------|
-| id              | long    | 文章 ID        |
+| id              | long    | 小说/文章 ID   |
 | title           | string  | 标题           |
 | slug            | string  | URL 友好标识   |
 | contentMarkdown  | string  | 正文（Markdown）|
@@ -226,6 +226,7 @@ Authorization: Bearer <JWT_TOKEN>
 | authorUsername  | string  | 作者用户名     |
 | createdAt       | string  | ISO 8601 时间  |
 | updatedAt       | string  | ISO 8601 时间  |
+| inspirationId   | long    | 可选，来源灵感 ID |
 
 ---
 
@@ -304,7 +305,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### POST /api/posts
 
-创建文章。**需要认证**。
+创建小说/文章。**需要认证**。可选关联灵感（仅当前用户的灵感可关联）。
 
 **请求体**
 
@@ -314,17 +315,18 @@ Authorization: Bearer <JWT_TOKEN>
 | contentMarkdown | string  | 是   | 正文（Markdown）    |
 | published       | boolean | 否   | 是否发布，默认 false |
 | tags            | string[]| 否   | 标签列表，每项最长 64 字符 |
+| inspirationId   | long    | 否   | 来源灵感 ID，关联 inspirations.id |
 
 **响应**
 
 - 成功：`201 Created`，body 为单条 `PostResponse`
-- 失败：`400 Bad Request`（校验失败）等
+- 失败：`400 Bad Request`（校验失败）；`403` 无权限关联该灵感
 
 ---
 
 ### PUT /api/posts/{id}
 
-更新指定文章。**需要认证**，仅作者本人可改。
+更新指定小说/文章。**需要认证**，仅作者本人可改。
 
 **路径参数**
 
@@ -332,7 +334,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 **请求体**
 
-与 `POST /api/posts` 相同：`title`、`contentMarkdown`、`published`、`tags`。
+与 `POST /api/posts` 相同：`title`、`contentMarkdown`、`published`、`tags`、可选 `inspirationId`。
 
 **响应**
 

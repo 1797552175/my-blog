@@ -31,36 +31,40 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto">
-      <div className="card p-6">
-        <h1 className="text-2xl font-bold mb-1">登录</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">使用你的账号登录后即可写文章。</p>
-
-        {error ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {String(error)}
+    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="card p-8 shadow-md">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold mb-2">登录</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">使用你的账号登录后即可写小说。</p>
           </div>
-        ) : null}
 
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label className="label">用户名</label>
-            <input className="input mt-1" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
-          </div>
-          <div>
-            <label className="label">密码</label>
-            <input className="input mt-1" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-          </div>
-          <button className="btn w-full" disabled={loading}>
-            {loading ? '登录中…' : '登录'}
-          </button>
-        </form>
+          {error ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {String(error)}
+            </div>
+          ) : null}
 
-        <div className="mt-6 text-sm text-zinc-600 dark:text-zinc-300">
-          还没有账号？{' '}
-          <Link className="text-primary-600 hover:underline" href="/register">
-            去注册
-          </Link>
+          <form className="space-y-5" onSubmit={onSubmit}>
+            <div>
+              <label className="label block mb-2">用户名</label>
+              <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+            </div>
+            <div>
+              <label className="label block mb-2">密码</label>
+              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            </div>
+            <button className="btn w-full py-3" disabled={loading}>
+              {loading ? '登录中…' : '登录'}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center text-sm text-zinc-600 dark:text-zinc-300">
+            还没有账号？{' '}
+            <Link className="text-primary-600 hover:underline font-medium" href="/register">
+              去注册
+            </Link>
+          </div>
         </div>
       </div>
     </div>

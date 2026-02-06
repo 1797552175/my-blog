@@ -163,7 +163,7 @@ export default function SettingsPage() {
       {/* AI 分身设定 */}
       <div className="card p-6">
         <h2 className="text-lg font-semibold mb-4">AI 分身设定</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">开启后，读者可在文章列表与文章详情页与你的 AI 分身对话。下方提示词会注入分身人格。</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">开启后，读者可在小说列表与小说详情页与你的 AI 分身对话。下方提示词会注入分身人格。</p>
         {personaError ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
             {String(personaError)}
@@ -259,7 +259,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="text-sm text-zinc-500 dark:text-zinc-400">
-        <Link href="/me/posts" className="text-primary-600 dark:text-primary-400 hover:underline">← 返回我的文章</Link>
+        <Link href="/me/posts" className="text-primary-600 dark:text-primary-400 hover:underline">← 返回我的小说</Link>
       </div>
     </div>
   );

@@ -24,7 +24,7 @@
   发 /api/xxx          根据 location /api/ 转发
 ```
 
-- 典型场景：用户点「登录」、提交表单、发文章、删文章、打开「我的文章」等。
+- 典型场景：用户点「登录」、提交表单、发小说、删小说、打开「我的小说」等。
 - 请求从**浏览器**发出，URL 是 `http://47.121.27.3/api/...` 或相对路径 `/api/...`，所以**一定先到 Nginx**，再由 Nginx 转发到 API。
 
 ### 2. 不经过 Nginx 的请求（Next.js 服务端发起的 API 调用）
@@ -39,7 +39,7 @@
                          Docker 内网直连，不经过 Nginx
 ```
 
-- 典型场景：用户打开「文章列表」「文章详情」「首页」时，页面是**服务端渲染**的，Next.js 在**服务端**先调 API 拿数据，再吐出 HTML。
+- 典型场景：用户打开「热门小说列表」「小说详情」「首页」时，页面是**服务端渲染**的，Next.js 在**服务端**先调 API 拿数据，再吐出 HTML。
 - 这条 API 请求是 **Web 容器 → API 容器**，走的是 `http://api:8080/api/...`，在 Docker 网络里直连，**不经过 Nginx**。
 - 用户浏览器只收到「已经渲染好的页面」，没有直接向 API 发请求。
 
@@ -57,8 +57,8 @@
 | 页面/场景 | 调用的接口 | 说明 |
 |-----------|------------|------|
 | 首页 `/` | `GET /api/health` | `page.js` 里 async `Home()` 调 `getHealth()` |
-| 文章列表 `/posts` | `GET /api/posts?page=0&size=10&...` | `posts/page.js` 里 async `PostsPage()` 调 `listPosts()` |
-| 文章详情 `/posts/[slug]` | `GET /api/posts/slug/:slug` | `posts/[slug]/page.js` 里 async `PostDetailPage()` 调 `getPostBySlug()` |
+| 热门小说列表 `/posts` | `GET /api/posts` 或 `GET /api/posts/search?q=...` | `posts/page.js` 里 async `PostsPage()` 调 `listPosts()` / `searchPosts()` |
+| 小说详情 `/posts/[slug]` | `GET /api/posts/slug/:slug` | `posts/[slug]/page.js` 里 async `PostDetailPage()` 调 `getPostBySlug()` |
 
 以上都是在 **服务端** 执行的 async 组件里发请求，base 是 `http://api:8080`，不经过 Nginx。
 
@@ -68,9 +68,9 @@
 |-----------|------------|------|
 | 登录页提交 | `POST /api/auth/login` | `LoginPage` 是 `'use client'`，`onSubmit` 里调 `login()` |
 | 注册页提交 | `POST /api/auth/register` | `RegisterPage` 是 `'use client'`，表单提交调 `register()` |
-| 写文章页提交 | `POST /api/posts` | `WritePage` 是 `'use client'`，`onSubmit` 里调 `createPost()` |
-| 我的文章列表 | `GET /api/posts/me?page=0&size=20&...` | `MyPostsPage` 是 `'use client'`，`useEffect` 里调 `listMyPosts()` |
-| 我的文章页删除 | `DELETE /api/posts/:id` | `MyPostsPage` 里 `onDelete` 调 `deletePost()` |
+| 写小说页提交 | `POST /api/posts` | `WritePage` 是 `'use client'`，`onSubmit` 里调 `createPost()`（可选带 inspirationId） |
+| 我的小说列表 | `GET /api/posts/me?page=0&size=20&...` | `MyPostsPage` 是 `'use client'`，`useEffect` 里调 `listMyPosts()` |
+| 我的小说页删除 | `DELETE /api/posts/:id` | `MyPostsPage` 里 `onDelete` 调 `deletePost()` |
 
 以上都是在**浏览器**里执行（`'use client'` + 事件/effect），请求发到当前站点 `/api/...`，所以会经过 Nginx 再转发到 API。
 

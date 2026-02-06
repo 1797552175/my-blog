@@ -1,6 +1,6 @@
-# My Blog Project
+# My Blog Project（AI 创作小说工具站）
 
-这是一个基于 **Spring Boot（后端）+ Next.js（前端）+ MariaDB（数据库）** 的个人博客项目。
+这是一个基于 **Spring Boot（后端）+ Next.js（前端）+ MariaDB（数据库）** 的 **AI 创作小说工具站**：首页与 AI 对话存灵感、灵感库可带灵感去写小说、热门小说列表与搜索合并。
 
 - 本文件（README.md）：放**运维/运行手册**（本地如何跑、服务器如何部署、环境变量、常用命令、排障）。
 - `PROJECT_OVERVIEW.md`：放**部署疑问/解决方法/知识总结/学习过程**。

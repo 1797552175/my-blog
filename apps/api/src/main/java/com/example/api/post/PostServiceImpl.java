@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.api.common.ApiException;
 import com.example.api.common.SlugUtil;
+import com.example.api.inspiration.Inspiration;
+import com.example.api.inspiration.InspirationRepository;
 import com.example.api.persona.PersonaProfileService;
 import com.example.api.post.dto.PostCreateRequest;
 import com.example.api.post.dto.PostResponse;
@@ -24,12 +26,14 @@ public class PostServiceImpl implements PostService {
 
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final InspirationRepository inspirationRepository;
     private final PersonaProfileService personaProfileService;
 
     public PostServiceImpl(PostRepository postRepository, UserRepository userRepository,
-            PersonaProfileService personaProfileService) {
+            InspirationRepository inspirationRepository, PersonaProfileService personaProfileService) {
         this.postRepository = postRepository;
         this.userRepository = userRepository;
+        this.inspirationRepository = inspirationRepository;
         this.personaProfileService = personaProfileService;
     }
 
@@ -118,6 +122,14 @@ public class PostServiceImpl implements PostService {
 
         Post post = new Post(request.title(), slug, request.contentMarkdown(), request.published(), author);
         post.getTags().addAll(request.tags() != null ? request.tags() : List.of());
+        if (request.inspirationId() != null) {
+            Inspiration inspiration = inspirationRepository.findById(request.inspirationId())
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "灵感不存在"));
+            if (!inspiration.getUser().getUsername().equals(username)) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "无权限关联该灵感");
+            }
+            post.setInspiration(inspiration);
+        }
         Post saved = postRepository.save(post);
         if (request.published()) {
             personaProfileService.updateForAuthor(author.getId());
@@ -140,6 +152,16 @@ public class PostServiceImpl implements PostService {
         post.setPublished(request.published());
         post.getTags().clear();
         post.getTags().addAll(request.tags() != null ? request.tags() : List.of());
+        if (request.inspirationId() != null) {
+            Inspiration inspiration = inspirationRepository.findById(request.inspirationId())
+                    .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "灵感不存在"));
+            if (!inspiration.getUser().getUsername().equals(username)) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "无权限关联该灵感");
+            }
+            post.setInspiration(inspiration);
+        } else {
+            post.setInspiration(null);
+        }
 
         if (request.published()) {
             personaProfileService.updateForAuthor(post.getAuthor().getId());
@@ -172,7 +194,8 @@ public class PostServiceImpl implements PostService {
                 post.getAuthor().getUsername(),
                 post.getAuthor().isPersonaEnabled(),
                 post.getCreatedAt(),
-                post.getUpdatedAt());
+                post.getUpdatedAt(),
+                post.getInspiration() != null ? post.getInspiration().getId() : null);
     }
 
     private String ensureUniqueSlug(String baseSlug) {

@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { ChevronDownIcon, ChevronUpIcon, BookOpenIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ChevronUpIcon, BookOpenIcon, TrashIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { list, getById, deleteById } from '../services/inspirations';
 
 const PAGE_SIZE = 10;
@@ -92,7 +93,7 @@ export default function InspirationBrowser() {
           {loading ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">加载中…</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无灵感，去首页用「AI 找灵感」保存一条吧。</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无灵感，去首页用「AI 找小说灵感」保存一条吧。</p>
           ) : (
             <div className="space-y-2">
               <ul className="space-y-1 max-h-[280px] overflow-y-auto">
@@ -110,6 +111,13 @@ export default function InspirationBrowser() {
                       <span className="font-medium block truncate">{item.title || '（无标题）'}</span>
                       <span className="text-xs text-zinc-500 dark:text-zinc-400">{formatDate(item.createdAt)}</span>
                     </button>
+                    <Link
+                      href={`/write?inspiration=${item.id}`}
+                      className="shrink-0 p-1.5 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 opacity-0 group-hover:opacity-100"
+                      title="用此灵感创作"
+                    >
+                      <PencilSquareIcon className="h-4 w-4" />
+                    </Link>
                     {deleteConfirmId === item.id ? (
                       <span className="flex gap-0.5 shrink-0 text-xs">
                         <button
@@ -190,6 +198,15 @@ export default function InspirationBrowser() {
                           </div>
                         </div>
                       ))}
+                      <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                        <Link
+                          href={`/write?inspiration=${detailId}`}
+                          className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          用此灵感创作
+                          <PencilSquareIcon className="h-4 w-4" />
+                        </Link>
+                      </div>
                     </div>
                   ) : null}
                 </div>

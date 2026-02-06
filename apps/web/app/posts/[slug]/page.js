@@ -13,17 +13,17 @@ export default async function PostDetailPage({ params }) {
   try {
     post = await getPostBySlug(slug);
   } catch (e) {
-    error = '文章不存在或已下线。';
+    error = '小说不存在或已下线。';
   }
 
   if (error) {
     return (
       <div className="max-w-3xl mx-auto" style={{ width: '80%' }}>
         <div className="card p-6">
-          <h1 className="text-xl font-semibold mb-2">无法加载文章</h1>
+          <h1 className="text-xl font-semibold mb-2">无法加载小说</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">{error}</p>
           <div className="mt-4">
-            <Link className="btn btn-ghost" href="/posts">返回文章列表</Link>
+            <Link className="btn btn-ghost" href="/posts">返回热门小说</Link>
           </div>
         </div>
       </div>
@@ -53,7 +53,7 @@ export default async function PostDetailPage({ params }) {
       </div>
 
       <div className="mt-6">
-        <Link className="btn btn-ghost" href="/posts">← 返回文章列表</Link>
+        <Link className="btn btn-ghost" href="/posts">← 返回热门小说</Link>
       </div>
 
       <CommentSection postId={post.id} />

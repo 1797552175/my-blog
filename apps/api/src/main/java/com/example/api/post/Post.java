@@ -1,6 +1,7 @@
 package com.example.api.post;
 
 import com.example.api.common.BaseEntity;
+import com.example.api.inspiration.Inspiration;
 import com.example.api.user.User;
 
 import java.util.ArrayList;
@@ -45,6 +46,10 @@ public class Post extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "inspiration_id", nullable = true)
+    private Inspiration inspiration;
 
     protected Post() {
     }
@@ -103,6 +108,14 @@ public class Post extends BaseEntity {
 
     public void setTags(List<String> tags) {
         this.tags = tags != null ? tags : new ArrayList<>();
+    }
+
+    public Inspiration getInspiration() {
+        return inspiration;
+    }
+
+    public void setInspiration(Inspiration inspiration) {
+        this.inspiration = inspiration;
     }
 
 }

@@ -20,12 +20,16 @@ export async function listMyPostTags() {
   return api.get('/posts/me/tags');
 }
 
-export async function createPost({ title, contentMarkdown, published, tags }) {
-  return api.post('/posts', { title, contentMarkdown, published, tags: tags || [] });
+export async function createPost({ title, contentMarkdown, published, tags, inspirationId }) {
+  const body = { title, contentMarkdown, published, tags: tags || [] };
+  if (inspirationId != null) body.inspirationId = inspirationId;
+  return api.post('/posts', body);
 }
 
-export async function updatePost(id, { title, contentMarkdown, published, tags }) {
-  return api.put(`/posts/${id}`, { title, contentMarkdown, published, tags: tags || [] });
+export async function updatePost(id, { title, contentMarkdown, published, tags, inspirationId }) {
+  const body = { title, contentMarkdown, published, tags: tags || [] };
+  if (inspirationId !== undefined) body.inspirationId = inspirationId;
+  return api.put(`/posts/${id}`, body);
 }
 
 export async function getPostById(id) {

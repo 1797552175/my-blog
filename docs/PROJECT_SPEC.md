@@ -1,4 +1,4 @@
-# 项目功能规格（my-blog）
+# 项目功能规格（my-blog / AI 创作小说工具站）
 
 本文档描述当前已实现的功能点，前后端分层列出。功能有更新时，先更新本文档并经确认后再改代码。
 
@@ -6,6 +6,7 @@
 
 ## 1. 项目概述
 
+- **定位**：AI 创作小说工具站。首页与 AI 对话存灵感→灵感库→选灵感「开始创作」写小说；热门小说列表与搜索合并；文章即「小说」。
 - **前端**：Next.js 14 (App Router)、React 18、Tailwind CSS、Headless UI
 - **后端**：Spring Boot 3、Java 21、Spring Security、JWT、JPA
 - **数据库**：MariaDB 11
@@ -35,9 +36,9 @@
 | 文章     | GET  | /api/posts/search           | 否   | 全文搜索，?q= 关键词 |
 | 文章     | GET  | /api/posts/{id}             | 是   | 作者获取单篇(编辑用) |
 | 文章     | GET  | /api/posts/me               | 是   | 当前用户文章列表   |
-| 文章     | POST | /api/posts                  | 是   | 创建文章           |
-| 文章     | PUT  | /api/posts/{id}             | 是   | 更新文章           |
-| 文章     | DELETE | /api/posts/{id}           | 是   | 删除文章           |
+| 文章     | POST | /api/posts                  | 是   | 创建小说（可选 inspirationId 关联灵感） |
+| 文章     | PUT  | /api/posts/{id}             | 是   | 更新小说（可选 inspirationId） |
+| 文章     | DELETE | /api/posts/{id}           | 是   | 删除小说           |
 | 评论     | GET  | /api/posts/{postId}/comments | 否   | 文章评论分页列表   |
 | 评论     | POST | /api/posts/{postId}/comments | 否   | 发表评论(登录/游客) |
 
@@ -46,8 +47,9 @@
 ### 2.3 数据模型（简要）
 
 - **User**：用户名、邮箱、密码（加密存储）
-- **Post**：标题、slug、正文（Markdown）、是否发布、标签（tags）、作者、创建/更新时间
+- **Post**：标题、slug、正文（Markdown）、是否发布、标签（tags）、作者、灵感（inspiration，可选）、创建/更新时间
 - **Comment**：文章、用户（可选）、游客昵称/邮箱/网址、内容、创建时间
+- **Inspiration**：用户、标题、对话消息；与 Post 可选关联（小说可记录来源灵感）
 
 接口请求/响应字段详见 [API 文档](API.md)。
 
@@ -75,27 +77,28 @@
 
 ---
 
-### 3.2 posts（文章表）
+### 3.2 posts（小说/文章表）
 
 | 字段名 | 类型 | 约束 | 备注 |
 |--------|------|------|------|
-| id | BIGINT | 主键、自增 | 文章主键 |
+| id | BIGINT | 主键、自增 | 主键 |
 | created_at | TIMESTAMP | 非空、不可更新 | 创建时间 |
 | updated_at | TIMESTAMP | 非空 | 更新时间 |
-| title | VARCHAR(200) | 非空 | 文章标题 |
+| title | VARCHAR(200) | 非空 | 标题 |
 | slug | VARCHAR(220) | 非空、唯一 | URL 友好标识，用于详情页路径 |
 | content_markdown | LONGTEXT | 非空 | 正文（Markdown） |
 | published | BIT(1) / BOOLEAN | 非空 | 是否已发布：0 草稿，1 已发布 |
 | author_id | BIGINT | 非空、外键 | 作者用户 ID，关联 users.id |
+| inspiration_id | BIGINT | 可空、外键 | 来源灵感 ID，关联 inspirations.id（可选） |
 
 **索引**
 
 - `idx_posts_slug`：slug，唯一
-- `idx_posts_author_id`：author_id（查某用户的文章列表）
+- `idx_posts_author_id`：author_id（查某用户的小说列表）
 
 **外键**
 
-- `author_id` → `users(id)`
+- `author_id` → `users(id)`；`inspiration_id` → `inspirations(id)`（可选）
 
 ---
 
@@ -141,14 +144,14 @@
 
 | 路由         | 文件                    | 功能         | 登录要求 |
 |--------------|-------------------------|--------------|----------|
-| /            | app/page.js             | 首页         | 否       |
+| /            | app/page.js             | 首页：AI 对话 + 灵感库（登录后）；存灵感、选灵感「开始创作」跳 /write?inspiration=id | 否（登录后用灵感） |
 | /login       | app/login/page.js       | 登录         | 否       |
 | /register    | app/register/page.js    | 注册         | 否       |
-| /posts       | app/posts/page.js       | 文章列表     | 否       |
-| /posts/[slug]| app/posts/[slug]/page.js| 文章详情     | 否       |
-| /write       | app/write/page.js       | 写/发文章（含标签）；?edit=id 为编辑 | 是       |
-| /me/posts    | app/me/posts/page.js    | 我的文章（含编辑/删除） | 是       |
-| /search      | app/search/page.js      | 搜索（?q= 关键词，摘要 120 字、空状态） | 否       |
+| /posts       | app/posts/page.js       | 热门小说列表 + 搜索（?q= 为搜索，?tag= 为按标签）；同一页展示 | 否       |
+| /posts/[slug]| app/posts/[slug]/page.js| 小说详情     | 否       |
+| /write       | app/write/page.js       | 写/发小说（含标签）；?edit=id 为编辑，?inspiration=id 为从灵感预填并关联 | 是       |
+| /me/posts    | app/me/posts/page.js    | 我的小说（含编辑/删除） | 是       |
+| /search      | app/search/page.js      | 重定向到 /posts 或 /posts?q=xxx（搜索已合并到热门小说页） | 否       |
 
 ### 4.3 前端与后端对应关系
 
@@ -156,14 +159,13 @@
 |----------------|-------------------------------------|
 | 登录           | POST /api/auth/login                |
 | 注册           | POST /api/auth/register             |
-| 文章列表       | GET /api/posts?page=&size=&sort=&tag= |
-| 文章详情       | GET /api/posts/slug/{slug}            |
-| 搜索           | GET /api/posts/search?q=&page=&size=  |
-| 我的文章       | GET /api/posts/me?page=&size=&sort=  |
+| 热门小说列表/搜索 | GET /api/posts 或 GET /api/posts/search?q= |
+| 小说详情       | GET /api/posts/slug/{slug}            |
+| 我的小说       | GET /api/posts/me?page=&size=&sort=  |
 | 编辑预填       | GET /api/posts/{id}（作者）           |
-| 创建文章       | POST /api/posts（含 tags）           |
-| 更新文章       | PUT /api/posts/{id}（含 tags）       |
-| 删除文章       | DELETE /api/posts/{id}                |
+| 创建小说       | POST /api/posts（含 tags、可选 inspirationId） |
+| 更新小说       | PUT /api/posts/{id}（含 tags、可选 inspirationId） |
+| 删除小说       | DELETE /api/posts/{id}                |
 | 标签列表       | GET /api/tags                         |
 | 评论列表       | GET /api/posts/{postId}/comments      |
 | 发表评论       | POST /api/posts/{postId}/comments     |

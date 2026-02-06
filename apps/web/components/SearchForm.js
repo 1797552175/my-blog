@@ -27,7 +27,7 @@ function addRecent(q) {
   } catch (_) {}
 }
 
-export default function SearchForm({ defaultValue = '', className = '', placeholder = '搜索文章…' }) {
+export default function SearchForm({ defaultValue = '', className = '', placeholder = '搜索小说…' }) {
   const router = useRouter();
   const [value, setValue] = useState(defaultValue);
   const [recent, setRecent] = useState([]);
@@ -48,13 +48,13 @@ export default function SearchForm({ defaultValue = '', className = '', placehol
     addRecent(q);
     setRecent(getRecent());
     setShowRecent(false);
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    router.push(`/posts?q=${encodeURIComponent(q)}`);
   }
 
   function useRecent(q) {
     setValue(q);
     setShowRecent(false);
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    router.push(`/posts?q=${encodeURIComponent(q)}`);
   }
 
   return (

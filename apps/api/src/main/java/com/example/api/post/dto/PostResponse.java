@@ -14,6 +14,7 @@ public record PostResponse(
         String authorUsername,
         boolean authorPersonaEnabled,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Long inspirationId
 ) {
 }

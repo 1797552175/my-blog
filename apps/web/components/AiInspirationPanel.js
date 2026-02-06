@@ -80,7 +80,7 @@ export default function AiInspirationPanel() {
       >
         <span className="flex items-center gap-2">
           <SparklesIcon className="h-5 w-5 text-indigo-500" />
-          AI 找灵感
+          AI 找小说灵感
         </span>
         {open ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
       </button>
@@ -88,7 +88,7 @@ export default function AiInspirationPanel() {
         <div className="border-t border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
           <div className="min-h-[200px] max-h-[320px] overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-3 space-y-3">
             {messages.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">输入问题，让 AI 帮你找写作灵感…</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">输入问题，让 AI 帮你找小说灵感…</p>
             ) : (
               messages.map((m, i) => (
                 <div
