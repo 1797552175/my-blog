@@ -18,7 +18,7 @@ export default async function PostDetailPage({ params }) {
 
   if (error) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto" style={{ width: '80%' }}>
         <div className="card p-6">
           <h1 className="text-xl font-semibold mb-2">无法加载文章</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">{error}</p>
@@ -31,7 +31,7 @@ export default async function PostDetailPage({ params }) {
   }
 
   return (
-    <article className="max-w-3xl mx-auto">
+    <article className="max-w-3xl mx-auto" style={{ width: '80%' }}>
       <header className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">{post.title}</h1>
         <div className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 flex flex-wrap items-center gap-x-2 gap-y-1">

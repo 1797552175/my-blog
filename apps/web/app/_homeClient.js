@@ -16,7 +16,7 @@ export default function HomeClient() {
 
   if (!isAuthed()) {
     return (
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto" style={{ width: '80%' }} >
         <div className="card p-6 text-center">
           <p className="text-zinc-600 dark:text-zinc-400 mb-3">登录后可使用「AI 找灵感」与保存灵感到灵感库。</p>
           <Link href="/login?next=/" className="btn">去登录</Link>
