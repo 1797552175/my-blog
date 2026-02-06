@@ -34,6 +34,10 @@
     @apply bg-transparent text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900;
   }
 
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
   .card {
     @apply rounded-2xl border border-zinc-200/80 bg-white shadow-sm;
     @apply dark:border-zinc-800 dark:bg-zinc-900;

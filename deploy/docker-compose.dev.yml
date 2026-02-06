@@ -15,6 +15,9 @@ services:
       DB_USER: blog
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      AI_API_URL: ${AI_API_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
       JAVA_TOOL_OPTIONS: "-Dspring.devtools.restart.enabled=true"
     volumes:
       - ../apps/api:/app

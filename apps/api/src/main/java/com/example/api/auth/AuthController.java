@@ -30,7 +30,7 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserRepository userRepository;
+    private static UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AuthController(
@@ -38,7 +38,7 @@ public class AuthController {
             UserRepository userRepository,
             PasswordEncoder passwordEncoder) {
         this.jwtTokenProvider = jwtTokenProvider;
-        this.userRepository = userRepository;
+        AuthController.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -77,7 +77,8 @@ public class AuthController {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPersonaPrompt(),
-                user.isPersonaEnabled());
+                user.isPersonaEnabled(),
+                user.getDefaultAiModel());
     }
 
     @PutMapping("/me")
@@ -99,6 +100,10 @@ public class AuthController {
             user.setPersonaEnabled(request.personaEnabled());
             changed = true;
         }
+        if (request.defaultAiModel() != null) {
+            user.setDefaultAiModel(request.defaultAiModel().isBlank() ? null : request.defaultAiModel().trim());
+            changed = true;
+        }
         if (changed) {
             userRepository.save(user);
         }
@@ -107,7 +112,8 @@ public class AuthController {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPersonaPrompt(),
-                user.isPersonaEnabled());
+                user.isPersonaEnabled(),
+                user.getDefaultAiModel());
     }
 
     @PutMapping("/me/password")
@@ -121,7 +127,7 @@ public class AuthController {
         userRepository.save(user);
     }
 
-    private User currentUser() {
+    public static User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");

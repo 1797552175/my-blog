@@ -10,7 +10,7 @@ import {
   Bars3Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { chat, addInspiration } from '../services/ai';
+import { streamChat, addInspiration } from '../services/ai';
 import { list as listInspirations, getById, deleteById } from '../services/inspirations';
 import { listPosts, listMyPosts } from '../services/posts';
 import HomePostList from './HomePostList';
@@ -204,26 +204,38 @@ export default function HomeAiInspirationLayout() {
     }
   }
 
-  async function onSend(e) {
+  function onSend(e) {
     e.preventDefault();
     const text = (input || '').trim();
     if (!text || loading) return;
     setInput('');
     const userMsg = { role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '' }]);
     setLoading(true);
-    try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const res = await chat(history, text);
-      const content = res?.content ?? '';
-      setMessages((prev) => [...prev, { role: 'assistant', content }]);
-    } catch (err) {
-      const msg = err?.data?.error ?? err?.message ?? '请求失败';
-      setMessages((prev) => [...prev, { role: 'assistant', content: `[错误] ${msg}` }]);
-      addToast(msg, 'error', 3000);
-    } finally {
+    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const model = 'gpt-4o-mini';
+    streamChat(history, text, model, (chunk) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant')
+          next[next.length - 1] = { ...last, content: last.content + chunk };
+        return next;
+      });
+    }, () => {
       setLoading(false);
-    }
+    }, (err) => {
+      setLoading(false);
+      const msg = err?.message ?? '请求失败';
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant')
+          next[next.length - 1] = { ...last, content: last.content || `[错误] ${msg}` };
+        return next;
+      });
+      addToast(msg, 'error', 3000);
+    });
   }
 
   const centerPanel = (

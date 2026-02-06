@@ -5,6 +5,7 @@ public record UserMeResponse(
         String username,
         String email,
         String personaPrompt,
-        boolean personaEnabled
+        boolean personaEnabled,
+        String defaultAiModel
 ) {
 }

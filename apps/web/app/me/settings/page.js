@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getMe, updateProfile, changePassword } from '../../../services/user';
 import { isAuthed } from '../../../services/auth';
+import { getModels } from '../../../services/ai';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -20,6 +21,15 @@ export default function SettingsPage() {
   const [personaSaving, setPersonaSaving] = useState(false);
   const [personaError, setPersonaError] = useState(null);
   const [personaSuccess, setPersonaSuccess] = useState(false);
+
+  const [defaultAiModel, setDefaultAiModel] = useState('gpt-4o-mini');
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelError, setModelError] = useState(null);
+  const [modelSuccess, setModelSuccess] = useState(false);
+
+  const [models, setModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -42,6 +52,7 @@ export default function SettingsPage() {
           setEmail(data.email || '');
           setPersonaPrompt(data.personaPrompt ?? '');
           setPersonaEnabled(data.personaEnabled ?? true);
+          setDefaultAiModel(data.defaultAiModel ?? 'gpt-4o-mini');
         }
       } catch (err) {
         if (!cancelled) setProfileError(err?.data?.error || err?.message || '加载失败');
@@ -51,6 +62,24 @@ export default function SettingsPage() {
     })();
     return () => { cancelled = true; };
   }, [router]);
+
+  useEffect(() => {
+    if (!isAuthed()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getModels();
+        if (!cancelled) {
+          setModels(data);
+        }
+      } catch (err) {
+        if (!cancelled) setModelsError(err?.data?.error || err?.message || '加载模型列表失败');
+      } finally {
+        if (!cancelled) setModelsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   async function onSaveProfile(e) {
     e.preventDefault();
@@ -103,6 +132,22 @@ export default function SettingsPage() {
       setPasswordError(err?.data?.error || err?.message || '修改失败');
     } finally {
       setPasswordSaving(false);
+    }
+  }
+
+  async function onSaveModel(e) {
+    e.preventDefault();
+    setModelError(null);
+    setModelSuccess(false);
+    setModelSaving(true);
+    try {
+      const data = await updateProfile({ defaultAiModel });
+      setProfile(data);
+      setModelSuccess(true);
+    } catch (err) {
+      setModelError(err?.data?.error || err?.message || '保存失败');
+    } finally {
+      setModelSaving(false);
     }
   }
 
@@ -198,6 +243,50 @@ export default function SettingsPage() {
           </div>
           <button type="submit" className="btn" disabled={personaSaving}>
             {personaSaving ? '保存中…' : '保存分身设定'}
+          </button>
+        </form>
+      </div>
+
+      {/* AI 模型选择 */}
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold mb-4">AI 模型选择</h2>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">选择默认使用的 AI 模型，用于对话和生成内容。</p>
+        {modelError ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {String(modelError)}
+          </div>
+        ) : null}
+        {modelSuccess ? (
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+            模型设置已保存
+          </div>
+        ) : null}
+        {modelsError ? (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {String(modelsError)}
+          </div>
+        ) : null}
+        <form className="space-y-4" onSubmit={onSaveModel}>
+          <div>
+            <label className="label">默认 AI 模型</label>
+            {modelsLoading ? (
+              <div className="input mt-1 bg-zinc-100 dark:bg-zinc-800 p-2">加载中…</div>
+            ) : (
+              <select
+                className="input mt-1"
+                value={defaultAiModel}
+                onChange={(e) => setDefaultAiModel(e.target.value)}
+              >
+                {models.map(model => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.provider}) - {model.description}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <button type="submit" className="btn" disabled={modelSaving}>
+            {modelSaving ? '保存中…' : '保存模型设置'}
           </button>
         </form>
       </div>

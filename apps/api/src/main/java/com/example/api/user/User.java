@@ -31,6 +31,9 @@ public class User extends BaseEntity implements org.springframework.security.cor
     @Column(name = "persona_enabled", nullable = false)
     private boolean personaEnabled = true;
 
+    @Column(name = "default_ai_model", length = 64, nullable = true)
+    private String defaultAiModel;
+
     protected User() {
     }
 
@@ -105,6 +108,14 @@ public class User extends BaseEntity implements org.springframework.security.cor
 
     public void setPersonaEnabled(boolean personaEnabled) {
         this.personaEnabled = personaEnabled;
+    }
+
+    public String getDefaultAiModel() {
+        return defaultAiModel;
+    }
+
+    public void setDefaultAiModel(String defaultAiModel) {
+        this.defaultAiModel = defaultAiModel;
     }
 
 }

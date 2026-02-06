@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { personaChat, getOrCreatePersonaSessionId } from '../services/ai';
+import { streamPersonaChat, getOrCreatePersonaSessionId } from '../services/ai';
 
 export default function PersonaChatPanel({
   authorId,
@@ -29,27 +29,39 @@ export default function PersonaChatPanel({
 
   if (!open) return null;
 
-  async function onSend(e) {
+  function onSend(e) {
     e.preventDefault();
     const text = (input || '').trim();
     if (!text || loading) return;
     setInput('');
     setError(null);
     const userMsg = { role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '' }]);
     setLoading(true);
-    try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const sid = sessionIdRef.current || getOrCreatePersonaSessionId();
-      const res = await personaChat(authorId, postId, history, text, sid);
-      const content = res?.content ?? '';
-      setMessages((prev) => [...prev, { role: 'assistant', content }]);
-      if (res?.sessionId) sessionIdRef.current = res.sessionId;
-    } catch (err) {
-      setError(err?.data?.error ?? err?.message ?? '请求失败');
-    } finally {
+    const history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const sid = sessionIdRef.current || getOrCreatePersonaSessionId();
+    const model = 'gpt-4o-mini';
+    streamPersonaChat(authorId, postId, history, text, sid, model, (chunk) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant')
+          next[next.length - 1] = { ...last, content: last.content + chunk };
+        return next;
+      });
+    }, () => {
       setLoading(false);
-    }
+    }, (err) => {
+      setLoading(false);
+      setError(err?.message ?? '请求失败');
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant')
+          next[next.length - 1] = { ...last, content: last.content || `[错误] ${err?.message ?? '请求失败'}` };
+        return next;
+      });
+    });
   }
 
   const title = postTitle ? `与 ${authorUsername} 聊：${postTitle}` : `与 ${authorUsername} 对话`;

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 public record UpdateProfileRequest(
         @Email @Size(max = 128) String email,
         String personaPrompt,
-        Boolean personaEnabled
+        Boolean personaEnabled,
+        @Size(max = 64) String defaultAiModel
 ) {
 }
