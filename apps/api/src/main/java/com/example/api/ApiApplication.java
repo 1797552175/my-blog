@@ -5,13 +5,31 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
 
 @SpringBootApplication
 public class ApiApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ApiApplication.class, args);
+    }
+
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+            .info(new Info()
+                .title("My Blog API")
+                .version("1.0")
+                .description("博客系统 API 文档")
+                .termsOfService("http://swagger.io/terms/")
+                .contact(new Contact().name("API Support").email("support@example.com"))
+                .license(new License().name("Apache 2.0").url("http://springdoc.org")));
     }
 
     @Component
