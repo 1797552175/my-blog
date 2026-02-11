@@ -51,6 +51,7 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/tags").permitAll()
                         .requestMatchers("/api/inspirations/**").authenticated()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/ai/persona/chat").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/ai/persona/chat/stream").permitAll()
                         .requestMatchers("/api/ai/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

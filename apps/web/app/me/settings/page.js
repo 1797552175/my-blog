@@ -55,7 +55,7 @@ export default function SettingsPage() {
           setDefaultAiModel(data.defaultAiModel ?? 'gpt-4o-mini');
         }
       } catch (err) {
-        if (!cancelled) setProfileError(err?.data?.error || err?.message || '加载失败');
+        if (!cancelled) setProfileError(err?.message ?? '加载失败');
       } finally {
         if (!cancelled) setProfileLoading(false);
       }
@@ -73,7 +73,7 @@ export default function SettingsPage() {
           setModels(data);
         }
       } catch (err) {
-        if (!cancelled) setModelsError(err?.data?.error || err?.message || '加载模型列表失败');
+        if (!cancelled) setModelsError(err?.message ?? '加载模型列表失败');
       } finally {
         if (!cancelled) setModelsLoading(false);
       }
@@ -91,7 +91,7 @@ export default function SettingsPage() {
       setProfile(data);
       setProfileSuccess(true);
     } catch (err) {
-      setProfileError(err?.data?.error || err?.message || '保存失败');
+      setProfileError(err?.message ?? '保存失败');
     } finally {
       setProfileSaving(false);
     }
@@ -107,7 +107,7 @@ export default function SettingsPage() {
       setProfile(data);
       setPersonaSuccess(true);
     } catch (err) {
-      setPersonaError(err?.data?.error ?? err?.message ?? '保存失败');
+      setPersonaError(err?.message ?? '保存失败');
     } finally {
       setPersonaSaving(false);
     }
@@ -129,7 +129,7 @@ export default function SettingsPage() {
       setConfirmPassword('');
       setPasswordSuccess(true);
     } catch (err) {
-      setPasswordError(err?.data?.error || err?.message || '修改失败');
+      setPasswordError(err?.message ?? '修改失败');
     } finally {
       setPasswordSaving(false);
     }
@@ -145,7 +145,7 @@ export default function SettingsPage() {
       setProfile(data);
       setModelSuccess(true);
     } catch (err) {
-      setModelError(err?.data?.error || err?.message || '保存失败');
+      setModelError(err?.message ?? '保存失败');
     } finally {
       setModelSaving(false);
     }

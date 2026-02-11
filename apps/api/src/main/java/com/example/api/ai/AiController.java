@@ -2,6 +2,8 @@ package com.example.api.ai;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,11 @@ public class AiController {
 
     private static final int POST_SUMMARY_TRUNCATE = 300;
     private static final String SESSION_ID_HEADER = "X-Session-Id";
+    
+    // 限流相关
+    private static final int PERSONA_CHAT_RATE_LIMIT = 10; // 每分钟最多 10 次请求
+    private static final long RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分钟
+    private final Map<String, long[]> requestCounts = new ConcurrentHashMap<>(); // key -> [最后请求时间, 请求次数]
 
     @Value("${ai.model:gpt-4o-mini}")
     private String defaultAiModel;
@@ -63,6 +70,59 @@ public class AiController {
         this.personaProfileRepository = personaProfileRepository;
         this.postRepository = postRepository;
         this.objectMapper = objectMapper;
+    }
+
+    /** 获取客户端 IP 地址 */
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("HTTP_CLIENT_IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("HTTP_X_FORWARDED_FOR");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // 如果是多个 IP，取第一个
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
+    }
+    
+    /** 检查是否允许请求（限流） */
+    private boolean checkRateLimit(String key) {
+        long now = System.currentTimeMillis();
+        
+        requestCounts.compute(key, (k, value) -> {
+            if (value == null) {
+                // 第一次请求，初始化计数器
+                return new long[]{now, 1};
+            } else {
+                long lastTime = value[0];
+                int count = (int) value[1];
+                
+                if (now - lastTime > RATE_LIMIT_WINDOW_MS) {
+                    // 时间窗口已过，重置计数器
+                    return new long[]{now, 1};
+                } else {
+                    // 时间窗口内，增加计数
+                    value[1] = count + 1;
+                    return value;
+                }
+            }
+        });
+        
+        long[] value = requestCounts.get(key);
+        int count = (int) value[1];
+        return count <= PERSONA_CHAT_RATE_LIMIT;
     }
 
     /** 将 chunk 按 JSON 字符串写入 SSE，避免内容中的换行破坏事件边界。 */
@@ -151,6 +211,13 @@ public class AiController {
             @RequestHeader(value = SESSION_ID_HEADER, required = false) String sessionIdHeader,
             HttpServletRequest httpRequest) {
 
+        // 限流检查
+        String clientIp = getClientIp(httpRequest);
+        String rateLimitKey = "persona_chat:" + clientIp;
+        if (!checkRateLimit(rateLimitKey)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试");
+        }
+
         Long authorId = request.authorId();
         if (authorId == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "请提供作者 ID");
@@ -216,6 +283,13 @@ public class AiController {
             @RequestHeader(value = SESSION_ID_HEADER, required = false) String sessionIdHeader,
             HttpServletRequest httpRequest,
             HttpServletResponse response) throws IOException {
+
+        // 限流检查
+        String clientIp = getClientIp(httpRequest);
+        String rateLimitKey = "persona_chat_stream:" + clientIp;
+        if (!checkRateLimit(rateLimitKey)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "请求过于频繁，请稍后再试");
+        }
 
         Long authorId = request.authorId();
         if (authorId == null) {

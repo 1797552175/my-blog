@@ -40,8 +40,7 @@ export default function PersonaChatPanel({
     setLoading(true);
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     const sid = sessionIdRef.current || getOrCreatePersonaSessionId();
-    const model = 'gpt-4o-mini';
-    streamPersonaChat(authorId, postId, history, text, sid, model, (chunk) => {
+    streamPersonaChat(authorId, postId, history, text, sid, (chunk) => {
       setMessages((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];

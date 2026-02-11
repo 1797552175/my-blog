@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { listMyPosts, listMyPostTags, deletePost } from '../../../services/posts';
 import { isAuthed } from '../../../services/auth';
+import { LoadingList } from '../../../lib/loading';
 
 export default function MyPostsPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function MyPostsPage() {
       const res = await listMyPosts({ page: 0, size: 20, tag: tag || undefined });
       setPosts(res.content || []);
     } catch (err) {
-      setError(err?.data?.error || err?.message || '加载失败');
+      setError(err?.message ?? '加载失败');
     } finally {
       setLoading(false);
     }
@@ -55,7 +56,7 @@ export default function MyPostsPage() {
       await deletePost(id);
       await load(selectedTag);
     } catch (err) {
-      alert(err?.data?.error || err?.message || '删除失败');
+      setError(err?.message ?? '删除失败');
     }
   }
 
@@ -69,8 +70,14 @@ export default function MyPostsPage() {
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          {String(error)}
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300 flex items-center justify-between gap-4">
+          <span>加载失败：{String(error)}</span>
+          <button 
+            className="btn btn-sm btn-ghost" 
+            onClick={() => load(selectedTag)}
+          >
+            重试
+          </button>
         </div>
       ) : null}
 
@@ -100,9 +107,21 @@ export default function MyPostsPage() {
       <div className="card">
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {loading ? (
-            <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">加载中…</div>
+            <LoadingList items={3} />
           ) : posts.length === 0 ? (
-            <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">还没有小说，去写一篇吧。</div>
+            <div className="p-12 text-center">
+              <div className="mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-100 dark:bg-zinc-800 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <p className="text-zinc-500 dark:text-zinc-400 mb-6">还没有小说，去写一篇吧</p>
+              </div>
+              <Link className="btn btn-primary px-6 py-3" href="/write">
+                写第一篇
+              </Link>
+            </div>
           ) : (
             posts.map((p) => (
               <div key={p.id} className="p-4 flex items-start justify-between gap-4">

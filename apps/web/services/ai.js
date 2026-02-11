@@ -70,15 +70,14 @@ function parseSSEStream(reader, decoder, onChunk, onComplete, onError) {
 }
 
 /**
- * 已登录用户 AI 对话（流式返回）
+ * 已登录用户 AI 对话（流式返回）。模型由服务端配置决定，不传 model。
  * @param {Array<{ role: string, content: string }>} messages 历史消息
  * @param {string} content 本轮用户输入
- * @param {string} model 模型名称
  * @param {function} onChunk 接收流式数据的回调
  * @param {function} onComplete 流结束的回调
  * @param {function} onError 发生错误的回调
  */
-export function streamChat(messages, content, model, onChunk, onComplete, onError) {
+export function streamChat(messages, content, onChunk, onComplete, onError) {
   if (typeof window === 'undefined') {
     onError && onError(new Error('Cannot use streamChat on server'));
     return;
@@ -95,8 +94,7 @@ export function streamChat(messages, content, model, onChunk, onComplete, onErro
     },
     body: JSON.stringify({
       messages: messages || [],
-      content: content || '',
-      model: model || 'gpt-4o-mini'
+      content: content || ''
     })
   })
     .then(response => {
@@ -151,18 +149,17 @@ export async function personaChat(authorId, postId, messages, content, sessionId
 }
 
 /**
- * 分身对话（流式返回，无需 JWT）
+ * 分身对话（流式返回，无需 JWT）。模型由服务端配置决定，不传 model。
  * @param {number} authorId 作者 ID
  * @param {number} postId 文章 ID
  * @param {Array<{ role: string, content: string }>} messages 历史消息
  * @param {string} content 本轮用户输入
  * @param {string} sessionId 会话 ID
- * @param {string} model 模型名称
  * @param {function} onChunk 接收流式数据的回调
  * @param {function} onComplete 流结束的回调
  * @param {function} onError 发生错误的回调
  */
-export function streamPersonaChat(authorId, postId, messages, content, sessionId, model, onChunk, onComplete, onError) {
+export function streamPersonaChat(authorId, postId, messages, content, sessionId, onChunk, onComplete, onError) {
   if (typeof window === 'undefined') {
     onError && onError(new Error('Cannot use streamPersonaChat on server'));
     return;
@@ -181,8 +178,7 @@ export function streamPersonaChat(authorId, postId, messages, content, sessionId
       authorId,
       postId: postId || null,
       messages: messages || [],
-      content: content || '',
-      model: model || 'gpt-4o-mini'
+      content: content || ''
     })
   })
     .then(response => {

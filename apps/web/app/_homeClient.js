@@ -164,8 +164,8 @@ export default function HomeClient() {
               </div>
             ) : postsError ? (
               <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-                <p className="text-gray-600 dark:text-gray-400 mb-4">加载失败，点击重试</p>
-                <button onClick={loadPosts} className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">加载失败：{postsError}</p>
+                <button onClick={loadPosts} className="btn btn-sm btn-ghost">
                   重试
                 </button>
               </div>

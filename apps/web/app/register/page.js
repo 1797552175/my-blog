@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { register } from '../../services/auth';
 
 export default function RegisterPage() {
@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
+  const errorRef = useRef(null);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -24,7 +25,10 @@ export default function RegisterPage() {
       setDone(true);
       setTimeout(() => router.push('/login'), 600);
     } catch (err) {
-      setError(err?.data?.error || err?.message || '注册失败');
+      setError(err?.message ?? '注册失败');
+      if (errorRef.current) {
+        errorRef.current.focus();
+      }
     } finally {
       setLoading(false);
     }
@@ -40,32 +44,60 @@ export default function RegisterPage() {
           </div>
 
           {error ? (
-            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {String(error)}
+            <div 
+              ref={errorRef}
+              tabIndex={-1}
+              className="mb-6 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300 focus:outline-none"
+              role="alert"
+            >
+              注册失败：{String(error)}
             </div>
           ) : null}
 
           {done ? (
-            <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="mb-6 rounded-xl border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-300">
               注册成功，正在跳转到登录页…
             </div>
           ) : null}
 
           <form className="space-y-5" onSubmit={onSubmit}>
             <div>
-              <label className="label block mb-2">用户名</label>
-              <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <label className="label block mb-2" htmlFor="username">用户名</label>
+              <input 
+                id="username"
+                className="input" 
+                value={username} 
+                onChange={(e) => setUsername(e.target.value)} 
+                autoComplete="username" 
+                required 
+              />
             </div>
             <div>
-              <label className="label block mb-2">邮箱</label>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              <label className="label block mb-2" htmlFor="email">邮箱</label>
+              <input 
+                id="email"
+                className="input" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                autoComplete="email" 
+                required 
+              />
             </div>
             <div>
-              <label className="label block mb-2">密码</label>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
+              <label className="label block mb-2" htmlFor="password">密码</label>
+              <input 
+                id="password"
+                className="input" 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                autoComplete="new-password" 
+                required 
+              />
             </div>
             <button className="btn w-full py-3" disabled={loading}>
-              {loading ? '提交中…' : '注册'}
+              {loading ? '注册中…' : '注册'}
             </button>
           </form>
 

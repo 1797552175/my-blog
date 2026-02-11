@@ -37,7 +37,7 @@ export default function AiInspirationPanel() {
       const content = res?.content ?? '';
       setMessages((prev) => [...prev, { role: 'assistant', content }]);
     } catch (err) {
-      const msg = err?.data?.error ?? err?.message ?? '请求失败';
+      const msg = err?.message ?? '请求失败';
       setMessages((prev) => [...prev, { role: 'assistant', content: `[错误] ${msg}` }]);
     } finally {
       setLoading(false);
@@ -65,7 +65,7 @@ export default function AiInspirationPanel() {
       setAddModalOpen(false);
       setMessages([]);
     } catch (err) {
-      setAddError(err?.data?.error ?? err?.message ?? '保存失败');
+      setAddError(err?.message ?? '保存失败');
     } finally {
       setAddSaving(false);
     }

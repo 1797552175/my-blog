@@ -63,7 +63,7 @@ export default function InspirationBrowser() {
         setDetail(null);
       }
     } catch (err) {
-      alert(err?.data?.error ?? err?.message ?? '删除失败');
+      alert(err?.message ?? '删除失败');
     } finally {
       setDeleteConfirmId(null);
     }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { login } from '../../services/auth';
 
 export default function LoginPage() {
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const errorRef = useRef(null);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -24,7 +25,10 @@ export default function LoginPage() {
       router.push(next);
       router.refresh();
     } catch (err) {
-      setError(err?.data?.error || err?.message || '登录失败');
+      setError(err?.message ?? '登录失败');
+      if (errorRef.current) {
+        errorRef.current.focus();
+      }
     } finally {
       setLoading(false);
     }
@@ -40,19 +44,39 @@ export default function LoginPage() {
           </div>
 
           {error ? (
-            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {String(error)}
+            <div 
+              ref={errorRef}
+              tabIndex={-1}
+              className="mb-6 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300 focus:outline-none"
+              role="alert"
+            >
+              登录失败：{String(error)}
             </div>
           ) : null}
 
           <form className="space-y-5" onSubmit={onSubmit}>
             <div>
-              <label className="label block mb-2">用户名</label>
-              <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <label className="label block mb-2" htmlFor="username">用户名</label>
+              <input 
+                id="username"
+                className="input" 
+                value={username} 
+                onChange={(e) => setUsername(e.target.value)} 
+                autoComplete="username" 
+                required 
+              />
             </div>
             <div>
-              <label className="label block mb-2">密码</label>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              <label className="label block mb-2" htmlFor="password">密码</label>
+              <input 
+                id="password"
+                className="input" 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                autoComplete="current-password" 
+                required 
+              />
             </div>
             <button className="btn w-full py-3" disabled={loading}>
               {loading ? '登录中…' : '登录'}

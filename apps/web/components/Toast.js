@@ -45,20 +45,20 @@ function Toast({ message, type, duration, onClose }) {
   const getTypeStyles = () => {
     switch (type) {
       case 'error':
-        return 'bg-red-500 text-white';
+        return 'bg-red-500 dark:bg-red-600 text-white shadow-lg dark:shadow-zinc-900/50';
       case 'success':
-        return 'bg-green-500 text-white';
+        return 'bg-green-500 dark:bg-emerald-600 text-white shadow-lg dark:shadow-zinc-900/50';
       case 'warning':
-        return 'bg-yellow-500 text-white';
+        return 'bg-yellow-500 dark:bg-amber-600 text-white shadow-lg dark:shadow-zinc-900/50';
       default:
-        return 'bg-indigo-500 text-white';
+        return 'bg-indigo-500 dark:bg-indigo-600 text-white shadow-lg dark:shadow-zinc-900/50';
     }
   };
 
   return (
-    <div className={`px-4 py-2 rounded-lg shadow-lg ${getTypeStyles()} flex items-center gap-2`}>
-      <span>{message}</span>
-      <button onClick={onClose} className="ml-2 text-white/80 hover:text-white">
+    <div className={`px-4 py-3 rounded-xl border border-black/10 dark:border-white/10 ${getTypeStyles()} flex items-center gap-2 min-w-[200px] max-w-[90vw]`}>
+      <span className="flex-1">{message}</span>
+      <button onClick={onClose} className="ml-2 min-h-[32px] min-w-[32px] flex items-center justify-center rounded text-white/90 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50" aria-label="关闭">
         ×
       </button>
     </div>

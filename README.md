@@ -53,6 +53,7 @@ my-blog/
   - `AI_API_KEY`（大模型 API Key，生产必须通过环境变量注入，勿提交仓库）
   - `AI_MODEL`（默认 `gpt-4o-mini`，对话与分身共用）
 - **Redis**（AI 分身对话上下文）：`REDIS_HOST`（默认 `localhost`）、`REDIS_PORT`（默认 `6379`）。本地开发若用 Docker 起 Redis，API 连 `127.0.0.1:6379`；服务器部署见 `deploy/docker-compose.yml`，API 依赖 `redis` 服务。
+- **CORS**（跨域配置）：`CORS_ALLOWED_ORIGINS`（默认 `http://localhost:3000,http://localhost`）。生产环境建议只配置真实的前端地址（域名或IP），多个地址用逗号分隔。
 
 说明：
 - **本地开发**：推荐在 PowerShell 中临时设置环境变量后启动（不写入仓库文件）。
@@ -105,9 +106,14 @@ cd C:\Users\huqicheng\Documents\think
 .\my-blog\scripts\start-api.ps1
 ```
 
-- 首次使用前：复制 `my-blog/config/env.example` 为 `my-blog/config/env.local`，按需填写 DB、JWT、AI、Redis 等变量。
+- 首次使用前：复制 `my-blog/deploy/env.example` 为 `my-blog/config/env.local`，按需填写 DB、JWT、AI、Redis 等变量。
 - 切换 DB（本地 3307 / 服务器隧道 13306）、启用 AI 等，只需改 `config/env.local`，无需改启动命令。
 - 若未设置 `JAVA_HOME`，可在 `config/env.local` 中增加一行：`JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`（路径按本机实际修改）。
+
+> **说明**：项目中有两个环境变量模板文件：
+> - `deploy/env.example`：用于服务器部署，复制为 `deploy/.env`（生产环境）
+> - `config/env.example`：用于本地开发，复制为 `config/env.local`（本地环境）
+> - `config/` 目录已被 `.gitignore` 排除，不会提交到 git，适合存放本地环境配置
 
 若需启用 **AI 灵感与作者分身**：在 `config/env.local` 中配置 `AI_API_KEY`、`REDIS_HOST`、`REDIS_PORT`，并先启动 Redis：`docker compose -f my-blog/deploy/docker-compose.yml up -d redis`。
 
@@ -137,7 +143,7 @@ cd C:\Users\huqicheng\Documents\think
 **启动方式**：与上面相同，使用脚本即可（脚本会读取 `config/env.local` 中的 `DB_PORT=13306` 等）：
 
 ```powershell
-.\my-blog\scripts\start-api.ps1
+.\scripts\start-api.ps1
 ```
 
 只需在 `config/env.local` 里把 `DB_PORT` 设为 `13306`（并确保隧道已开、密码正确）。

@@ -1,4 +1,5 @@
 const isServer = typeof window === 'undefined';
+import { ApiError, normalizeError } from './error';
 
 function getBaseUrl() {
   if (isServer) {
@@ -31,10 +32,10 @@ async function request(path, options = {}) {
   const data = text ? safeJson(text) : null;
 
   if (!res.ok) {
-    const err = new Error(typeof data === 'object' && data?.error ? data.error : `http_${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
+    const message = typeof data === 'object' && data?.error ? data.error : `http_${res.status}`;
+    const error = new ApiError(message, data?.code ?? null, res.status, data?.fields ?? null);
+    error.data = data;
+    throw error;
   }
 
   return data;

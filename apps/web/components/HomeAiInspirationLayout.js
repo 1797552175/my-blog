@@ -120,7 +120,14 @@ export default function HomeAiInspirationLayout() {
   }, [loadPosts, loadMyPosts]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      const scrollContainer = messagesEndRef.current.closest('.overflow-y-auto');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      } else {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -213,8 +220,7 @@ export default function HomeAiInspirationLayout() {
     setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '' }]);
     setLoading(true);
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    const model = 'gpt-4o-mini';
-    streamChat(history, text, model, (chunk) => {
+    streamChat(history, text, (chunk) => {
       setMessages((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];
