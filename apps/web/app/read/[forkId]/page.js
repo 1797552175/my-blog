@@ -45,6 +45,8 @@ export default function ReadPage() {
   const [generatingAIOptions, setGeneratingAIOptions] = useState(false); // 是否正在生成AI选项
   const [generatingNextChapter, setGeneratingNextChapter] = useState(false); // 是否正在生成下一章
   const [generatedChapterContent, setGeneratedChapterContent] = useState(null); // AI生成的章节内容
+  const [generatingStage, setGeneratingStage] = useState(''); // 生成阶段：'thinking' | 'writing' | 'polishing' | 'completing'
+  const [generatingChapterNumber, setGeneratingChapterNumber] = useState(null); // 正在生成的章节号
 
   const load = useCallback(async () => {
     if (!forkId) return;
@@ -111,6 +113,8 @@ export default function ReadPage() {
   async function handleChoose(optionId) {
     if (!nextBranchPoint || choosing) return;
     setChoosing(true);
+    setGeneratingChapterNumber(commits.length + 1);
+    setGeneratingStage('thinking');
     setError(null);
     try {
       await choose(forkId, { branchPointId: nextBranchPoint.id, optionId });
@@ -120,6 +124,8 @@ export default function ReadPage() {
       setError(err?.message ?? '生成失败');
     } finally {
       setChoosing(false);
+      setGeneratingChapterNumber(null);
+      setGeneratingStage('');
     }
   }
 
@@ -589,9 +595,77 @@ export default function ReadPage() {
 
         {/* 当前章节内容 */}
         <div className="mb-8">
-          {authorChapters.length > 0 || commits.length > 0 ? (
+          {choosing && generatingChapterNumber ? (
+            <div className="p-8 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-full bg-indigo-100 dark:bg-indigo-900/40">
+                  <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <h3 className="text-xl font-semibold text-indigo-800 dark:text-indigo-200 mb-2">
+                  正在生成第 {generatingChapterNumber} 章
+                </h3>
+                <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-4">
+                  AI 正在为你创作精彩内容，请稍候...
+                </p>
+                <div className="max-w-md mx-auto space-y-2">
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                      generatingStage === 'thinking' || generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {generatingStage === 'thinking' || generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '1'}
+                    </div>
+                    <span className={generatingStage === 'thinking' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
+                      正在思考剧情发展...
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                      generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '2'}
+                    </div>
+                    <span className={generatingStage === 'writing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
+                      正在撰写章节内容...
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                      generatingStage === 'polishing' || generatingStage === 'completing'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '3'}
+                    </div>
+                    <span className={generatingStage === 'polishing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
+                      正在润色完善...
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                      generatingStage === 'completing'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {generatingStage === 'completing' ? '✓' : '4'}
+                    </div>
+                    <span className={generatingStage === 'completing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
+                      即将完成...
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-6 max-w-md mx-auto">
+                  <div className="h-2 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 dark:bg-indigo-400 animate-pulse transition-all duration-1000" style={{ width: '60%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : authorChapters.length > 0 || commits.length > 0 ? (
             currentChapterIndex < authorChapters.length ? (
-              // 显示作者章节
               <div>
                 <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 mb-4">{authorChapters[currentChapterIndex]?.title || '未命名章节'}</h2>
                 <div className="prose dark:prose-invert max-w-none">
@@ -599,7 +673,6 @@ export default function ReadPage() {
                 </div>
               </div>
             ) : (
-              // 显示用户生成的章节
               <div>
                 {commits[currentChapterIndex - authorChapters.length]?.optionLabel ? (
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">你的选择：{commits[currentChapterIndex - authorChapters.length].optionLabel}</p>

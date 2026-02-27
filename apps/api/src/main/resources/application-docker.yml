@@ -21,6 +21,11 @@ spring:
         dialect: org.hibernate.dialect.MariaDBDialect
     open-in-view: false
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
 jwt:
   # 从环境变量注入，避免把密钥写进镜像/仓库
   secret: ${JWT_SECRET:please_change_me_please_change_me_please_change_me}

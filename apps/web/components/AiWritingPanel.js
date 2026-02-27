@@ -32,6 +32,8 @@ export default function AiWritingPanel({
   const [generatedContent, setGeneratedContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  const [generatingStage, setGeneratingStage] = useState(''); // 生成阶段：'analyzing' | 'generating' | 'polishing' | 'completing'
+  const [progress, setProgress] = useState(0); // 进度百分比
   const abortControllerRef = useRef(null);
 
   // 根据选中文本自动选择类型
@@ -58,6 +60,8 @@ export default function AiWritingPanel({
     setIsGenerating(true);
     setGeneratedContent('');
     setShowResult(true);
+    setProgress(0);
+    setGeneratingStage('analyzing');
 
     const params = {
       storyId,
@@ -73,12 +77,32 @@ export default function AiWritingPanel({
       params,
       (chunk) => {
         setGeneratedContent((prev) => prev + chunk);
+        setGeneratingStage((prevStage) => {
+          if (prevStage === 'analyzing') {
+            setProgress(30);
+            return 'generating';
+          }
+          return prevStage;
+        });
+        setProgress((prev) => {
+          if (prev < 90) {
+            return Math.min(prev + 5, 90);
+          }
+          return prev;
+        });
       },
       () => {
-        setIsGenerating(false);
+        setGeneratingStage('completing');
+        setProgress(100);
+        setTimeout(() => {
+          setIsGenerating(false);
+          setGeneratingStage('');
+        }, 500);
       },
       (error) => {
         setIsGenerating(false);
+        setGeneratingStage('');
+        setProgress(0);
         setGeneratedContent((prev) => prev + '\n\n[生成失败：' + (error?.message || '未知错误') + ']');
       }
     );
@@ -275,9 +299,61 @@ export default function AiWritingPanel({
             <div className="flex items-center justify-between px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">生成结果</span>
               {isGenerating && (
-                <span className="text-xs text-indigo-600 dark:text-indigo-400 animate-pulse">正在生成...</span>
+                <span className="text-xs text-indigo-600 dark:text-indigo-400 animate-pulse">
+                  {generatingStage === 'analyzing' && '正在分析...'}
+                  {generatingStage === 'generating' && '正在生成...'}
+                  {generatingStage === 'completing' && '即将完成...'}
+                </span>
               )}
             </div>
+            
+            {isGenerating && (
+              <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-indigo-700 dark:text-indigo-300">生成进度</span>
+                  <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">{progress}%</span>
+                </div>
+                <div className="h-2 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500 dark:bg-indigo-400 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="mt-2 space-y-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                      progress >= 0 ? 'bg-indigo-500 text-white' : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {progress > 0 ? '✓' : '1'}
+                    </div>
+                    <span className={progress > 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-zinc-500 dark:text-zinc-400'}>
+                      分析上下文
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                      progress >= 30 ? 'bg-indigo-500 text-white' : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {progress >= 30 ? '✓' : '2'}
+                    </div>
+                    <span className={progress >= 30 ? 'text-indigo-700 dark:text-indigo-300' : 'text-zinc-500 dark:text-zinc-400'}>
+                      生成内容
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                      progress >= 100 ? 'bg-indigo-500 text-white' : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    }`}>
+                      {progress >= 100 ? '✓' : '3'}
+                    </div>
+                    <span className={progress >= 100 ? 'text-indigo-700 dark:text-indigo-300' : 'text-zinc-500 dark:text-zinc-400'}>
+                      完成
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="p-3 max-h-64 overflow-y-auto">
               {generatedContent ? (
                 <div className="text-sm text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">

@@ -4,6 +4,7 @@ import com.example.api.ai.AiChatService;
 import com.example.api.readerfork.StoryCommit;
 import com.example.api.readerfork.StoryCommitRepository;
 import com.example.api.storyseed.StorySeed;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ public class TimelineService {
     private final CommitTimelineMappingRepository mappingRepository;
     private final StoryCommitRepository commitRepository;
     private final AiChatService aiChatService;
+    private final ObjectMapper objectMapper;
 
     private static final String TIMELINE_ANALYSIS_PROMPT = """
             你是一位时间线分析专家。请分析以下故事章节，判断是否存在"时间线分支"的可能性。
@@ -48,11 +50,13 @@ public class TimelineService {
             StoryTimelineRepository timelineRepository,
             CommitTimelineMappingRepository mappingRepository,
             StoryCommitRepository commitRepository,
-            AiChatService aiChatService) {
+            AiChatService aiChatService,
+            ObjectMapper objectMapper) {
         this.timelineRepository = timelineRepository;
         this.mappingRepository = mappingRepository;
         this.commitRepository = commitRepository;
         this.aiChatService = aiChatService;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -205,8 +209,7 @@ public class TimelineService {
             }
             cleanedJson = cleanedJson.trim();
 
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(cleanedJson);
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(cleanedJson);
 
             boolean hasBranchPotential = root.has("has_branch_potential") &&
                     root.get("has_branch_potential").asBoolean();

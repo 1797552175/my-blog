@@ -41,6 +41,11 @@ spring:
           min-idle: 0
           max-wait: -1
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: UTC
+
 # AI 配置（OpenAI 兼容接口）
 ai:
   api-url: ${AI_API_URL:https://api.openai.com/v1/chat/completions}
