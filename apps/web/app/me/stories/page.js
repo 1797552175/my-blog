@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { listMyStories, deleteStory, getMyTags } from '../../../services/stories';
 import { isAuthed } from '../../../services/auth';
@@ -9,8 +9,7 @@ import { LoadingList } from '../../../lib/loading';
 
 export default function MyStoriesPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const filter = searchParams.get('filter') || 'all';
+  const [filter, setFilter] = useState('all');
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
@@ -23,6 +22,13 @@ export default function MyStoriesPage() {
   useEffect(() => {
     setIsMounted(true);
     setIsAuthenticated(isAuthed());
+    
+    // 在客户端获取filter参数
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const filterParam = urlParams.get('filter') || 'all';
+      setFilter(filterParam);
+    }
   }, []);
 
   const load = useCallback(async () => {

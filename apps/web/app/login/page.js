@@ -1,16 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useRef, useCallback } from 'react';
 import { login } from '../../services/auth';
 import { useSubmit } from '../../lib/hooks';
 import { normalizeError } from '../../lib/error';
 
+function NextRedirect() {
+  const { useSearchParams } = require('next/navigation');
+  const sp = useSearchParams();
+  return sp.get('next') || '/';
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const sp = useSearchParams();
-  const next = useMemo(() => sp.get('next') || '/', [sp]);
+  const next = '/'; // 默认值，实际值会在客户端获取
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,8 +46,14 @@ export default function LoginPage() {
           url: window.location.href
         });
         window.dispatchEvent(event);
+        
+        // 在客户端获取next参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const nextParam = urlParams.get('next') || '/';
+        router.push(nextParam);
+      } else {
+        router.push('/');
       }
-      router.push(next);
     } else {
       const apiError = normalizeError(result.error);
       setError(apiError.getUserMessage());
