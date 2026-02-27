@@ -5,21 +5,21 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.api.post.PostRepository;
+import com.example.api.story.StoryRepository;
 
 @Service
 public class TagServiceImpl implements TagService {
 
-    private final PostRepository postRepository;
+    private final StoryRepository storyRepository;
 
-    public TagServiceImpl(PostRepository postRepository) {
-        this.postRepository = postRepository;
+    public TagServiceImpl(StoryRepository storyRepository) {
+        this.storyRepository = storyRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<TagResponse> listAllWithCount() {
-        List<Object[]> rows = postRepository.findAllTagCounts();
+        List<Object[]> rows = storyRepository.findAllTagCounts();
         return rows.stream()
                 .map(row -> new TagResponse((String) row[0], ((Number) row[1]).longValue()))
                 .toList();

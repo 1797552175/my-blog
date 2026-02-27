@@ -1,9 +1,13 @@
-# My Blog Project（AI 创作小说工具站）
+# AI 小说创作与互动阅读平台
 
-这是一个基于 **Spring Boot（后端）+ Next.js（前端）+ MariaDB（数据库）** 的 **AI 创作小说工具站**：首页与 AI 对话存灵感、灵感库可带灵感去写小说、热门小说列表与搜索合并。
+这是一个基于 **Spring Boot（后端）+ Next.js（前端）+ MariaDB（数据库）** 的 **AI 小说创作与互动阅读平台**。
 
-- 本文件（README.md）：放**运维/运行手册**（本地如何跑、服务器如何部署、环境变量、常用命令、排障）。
-- `PROJECT_OVERVIEW.md`：放**部署疑问/解决方法/知识总结/学习过程**。
+**核心功能**：
+- **写小说**：首页与 AI 对话获取灵感 → 保存到灵感库 → 选灵感开始写小说；RAG + 预压缩算法辅助 AI 高效写作。
+- **AI 互动阅读**：选择剧情走向，AI 实时续写专属故事章节；开源小说以章节为节点可被读者 Fork 续写。
+- **小说库**：浏览已完成小说或参与 AI 互动续写；作者可管理故事种子、分支点、世界观与 Pull Request。
+
+本文件（**README.md**）为**运维/运行手册**：本地如何跑、服务器如何部署、环境变量、常用命令、排障。功能规格与接口定义见下方「相关文档」。
 
 ---
 
@@ -15,10 +19,17 @@ my-blog/
     api/      # Spring Boot 后端 API
     web/      # Next.js 前端应用
   deploy/     # 部署相关配置（docker-compose + nginx）
-  config/     # 环境变量示例等
-  README.md
-  PROJECT_OVERVIEW.md
+  config/     # 环境变量示例（本地 config/env.local 不提交）
+  docs/       # 项目文档（功能规格、API、表结构）
+  scripts/    # API 自动化测试、测试数据生成等
+  README.md   # 本文件：运维与运行手册
 ```
+
+**相关文档**（开发/对接时必看）：
+- [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) — 功能规格、后端模块与 API 一览、**数据库表结构（共 29 张表）**
+- [docs/API.md](docs/API.md) — 接口请求/响应格式、错误码、分页等
+- [docs/README.md](docs/README.md) — 文档索引
+- [scripts/README.md](scripts/README.md) — API 自动化测试说明
 
 ---
 
@@ -65,59 +76,6 @@ my-blog/
 - **方案 B：连服务器上的 DB（通过 SSH 隧道）** — 服务器上 DB 映射为宿主机 `3307`（docker 3307:3306），隧道应为本地 `13306` → 服务器 `3307`，则 `DB_HOST=127.0.0.1`，`DB_PORT=13306`，密码用服务器 DB 的密码。
 
 切换方式：改 `config/env.local` 里的 `DB_PORT`（3307 或 13306），然后按 README 用该文件里的变量启动后端即可。
-
----
-
-## 本地开发（推荐模式：本地前后端 + 本地 DB 3307）
-
-- 本地跑 Web（Next.js）
-- 本地跑 API（Spring Boot）
-- 本地用 docker 起 MariaDB，映射到 `3307`
-
-### 先决条件
-
-- Docker Desktop
-- JDK 21
-- Node.js 18+
-
-### 启动步骤（3 个终端）
-
-#### 1) 启动本地数据库（MariaDB，端口 3307）
-
-在项目根目录执行：
-
-```powershell
- $env:DB_PASSWORD="abc123"; $env:DB_ROOT_PASSWORD="abc123"
-docker compose -f my-blog/deploy/docker-compose.yml up -d db
-```
-
-> 注意：`docker-compose.yml` 里 DB 用户是 `blog`，并且会使用 `DB_PASSWORD` 创建/校验密码。
-> 如果你不设置 `DB_PASSWORD/DB_ROOT_PASSWORD`（或之前用不同密码启动过），后端会出现 `Access denied for user 'blog'...`，从而导致注册/登录/文章接口失败。
-
-#### 2) 启动本地后端（Spring Boot）
-
-**推荐**：执行脚本会自动从 `config/env.local` 读取环境变量后启动。
-
-- 若当前在**项目根目录**（think）：`.\my-blog\scripts\start-api.ps1`
-- 若当前已在 **my-blog** 目录：`.\scripts\start-api.ps1`
-
-```powershell
-cd C:\Users\huqicheng\Documents\think
-.\my-blog\scripts\start-api.ps1
-```
-
-- 首次使用前：复制 `my-blog/deploy/env.example` 为 `my-blog/config/env.local`，按需填写 DB、JWT、AI、Redis 等变量。
-- 切换 DB（本地 3307 / 服务器隧道 13306）、启用 AI 等，只需改 `config/env.local`，无需改启动命令。
-- 若未设置 `JAVA_HOME`，可在 `config/env.local` 中增加一行：`JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot`（路径按本机实际修改）。
-
-> **说明**：项目中有两个环境变量模板文件：
-> - `deploy/env.example`：用于服务器部署，复制为 `deploy/.env`（生产环境）
-> - `config/env.example`：用于本地开发，复制为 `config/env.local`（本地环境）
-> - `config/` 目录已被 `.gitignore` 排除，不会提交到 git，适合存放本地环境配置
-
-若需启用 **AI 灵感与作者分身**：在 `config/env.local` 中配置 `AI_API_KEY`、`REDIS_HOST`、`REDIS_PORT`，并先启动 Redis：`docker compose -f my-blog/deploy/docker-compose.yml up -d redis`。
-
----
 
 ## 本地开发：切换使用哪个 DB（本地 DB / 服务器 DB（SSH 隧道））
 
@@ -203,6 +161,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 USE blog;
 SHOW TABLES;
 ```
+
+表结构说明（字段含义、索引、外键）见 [docs/PROJECT_SPEC.md 第 3 节](docs/PROJECT_SPEC.md)；库中列注释由迁移 `V12__add_column_comments.sql` 写入，新增表时需同步维护 COMMENT 与文档。
 
 ---
 
@@ -375,8 +335,8 @@ SHOW TABLES;
 ### 功能说明
 
 - **首页 AI 找灵感**：登录后在首页展开「AI 找灵感」面板，与 AI 多轮对话获取写作灵感，可点击「添加到灵感库」保存当前对话（可选标题）。
-- **写文章浏览灵感**：写文章页（`/write`）右侧「浏览灵感」侧栏，分页查看已保存灵感，点击某条可展开完整对话辅助写作。
-- **作者 AI 分身**：读者在文章列表（`/posts`）或文章详情（`/posts/[slug]`）可点击「与 TA 对话」/「与作者 AI 对话」，与该作者的 AI 分身多轮对话（无需登录）。分身结合作者在设置中填写的「分身提示词」与系统根据其已发布文章自动提炼的风格描述生成回复。
+- **写小说时浏览灵感**：写小说页（`/write`）右侧「浏览灵感」侧栏，分页查看已保存灵感，点击某条可展开完整对话辅助写作。
+- **作者 AI 分身**：读者在小说库或故事详情页可点击「与 TA 对话」/「与作者 AI 对话」，与该作者的 AI 分身多轮对话。分身结合作者在设置中填写的「分身提示词」与系统根据其已发布内容提炼的风格描述生成回复。
 
 ### 配置入口
 
@@ -392,9 +352,83 @@ SHOW TABLES;
 
 ---
 
+## API 自动化测试
+
+每次 AI 生成代码后，建议运行自动化测试脚本验证接口是否正常。
+
+### 完整测试（推荐，覆盖60+接口）
+
+```bash
+cd scripts
+node api-test-complete.js --report
+```
+
+### 生成测试数据后测试
+
+```bash
+cd scripts
+node test-data-generator.js      # 生成测试数据
+node api-test-complete.js        # 运行完整测试
+```
+
+### 快速测试（基础22个接口）
+
+```bash
+cd scripts
+node api-test.js
+```
+
+### 生成详细报告
+
+```bash
+cd scripts
+node api-test-complete.js --report
+```
+
+### CI 模式（测试失败时返回非零退出码）
+
+```bash
+cd scripts
+node api-test-complete.js --ci
+```
+
+### Gradle 集成
+
+```bash
+cd apps/api
+../../gradlew apiTest          # 运行测试
+../../gradlew apiTestReport    # 生成报告
+```
+
+### 完整测试覆盖
+
+- **健康检查**：`/api/health`
+- **认证接口**：注册、登录、获取/更新用户信息、修改密码
+- **Story 接口**：列表、搜索、CRUD、收藏、Fork、贡献者等
+- **Chapter 接口**：章节列表、详情、CRUD 等
+- **Wiki 接口**：页面、角色、时间线等
+- **StorySeed 接口**：故事种子、分支点、世界观、读者 Fork、Pull Request 等
+- **灵感接口**：灵感的 CRUD 操作
+- **标签接口**：标签列表
+- **AI 接口**：模型列表、聊天、流式聊天
+
+### 报告输出
+
+测试完成后输出：
+1. **控制台摘要** - 实时显示测试结果
+2. **AI 友好报告** - JSON 格式，可直接复制给 AI 分析
+3. **Markdown 报告** - 保存到 `test-reports/` 目录
+
+更多详情见 [scripts/README.md](scripts/README.md)
+
+---
+
 ## 常用命令速查
 
 - 启动本地 DB：`docker compose -f my-blog/deploy/docker-compose.yml up -d db`
 - 启动本地 DB + Redis（启用 AI 时）：`docker compose -f my-blog/deploy/docker-compose.yml up -d db redis`
 - 停止本地 DB：`docker compose -f my-blog/deploy/docker-compose.yml stop db`
 - 查看本地 DB 日志：`docker compose -f my-blog/deploy/docker-compose.yml logs -f db`
+- 运行 API 完整测试：`cd scripts && node api-test-complete.js`
+- 运行 API 测试并生成报告：`cd scripts && node api-test-complete.js --report`
+- 生成测试数据：`cd scripts && node test-data-generator.js`

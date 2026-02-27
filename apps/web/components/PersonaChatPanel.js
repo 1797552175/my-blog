@@ -29,7 +29,7 @@ export default function PersonaChatPanel({
 
   if (!open) return null;
 
-  function onSend(e) {
+  async function onSend(e) {
     e.preventDefault();
     const text = (input || '').trim();
     if (!text || loading) return;

@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { login } from '../../services/auth';
+import { useSubmit } from '../../lib/hooks';
+import { normalizeError } from '../../lib/error';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,25 +14,41 @@ export default function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const errorRef = useRef(null);
+
+  // 使用 useSubmit 防止重复提交
+  const { loading, execute: handleLogin } = useSubmit(
+    useCallback(async (credentials) => {
+      await login(credentials);
+    }, [])
+  );
 
   async function onSubmit(e) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
-    try {
-      await login({ username, password });
+    
+    const result = await handleLogin({ username, password });
+    
+    if (result.success) {
+      // 登录成功后，手动触发storage事件来更新Layout组件的状态
+      if (typeof window !== 'undefined') {
+        // 手动触发storage事件
+        const event = new StorageEvent('storage', {
+          key: 'user',
+          newValue: localStorage.getItem('user'),
+          oldValue: null,
+          url: window.location.href
+        });
+        window.dispatchEvent(event);
+      }
       router.push(next);
-      router.refresh();
-    } catch (err) {
-      setError(err?.message ?? '登录失败');
+    } else {
+      const apiError = normalizeError(result.error);
+      setError(apiError.getUserMessage());
       if (errorRef.current) {
         errorRef.current.focus();
       }
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -50,7 +68,7 @@ export default function LoginPage() {
               className="mb-6 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300 focus:outline-none"
               role="alert"
             >
-              登录失败：{String(error)}
+              {error}
             </div>
           ) : null}
 
@@ -64,6 +82,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)} 
                 autoComplete="username" 
                 required 
+                disabled={loading}
               />
             </div>
             <div>
@@ -76,9 +95,19 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)} 
                 autoComplete="current-password" 
                 required 
+                disabled={loading}
               />
             </div>
-            <button className="btn w-full py-3" disabled={loading}>
+            <button 
+              className="btn w-full py-3 flex items-center justify-center gap-2" 
+              disabled={loading}
+            >
+              {loading && (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
               {loading ? '登录中…' : '登录'}
             </button>
           </form>
@@ -94,4 +123,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

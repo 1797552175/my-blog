@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { isAuthed } from '../services/auth';
 import HomeAiInspirationLayout from '../components/HomeAiInspirationLayout';
-import { listPosts } from '../services/posts';
+import { listStories } from '../services/stories';
 import { excerpt } from '../lib/utils';
 import { SparklesIcon, BookOpenIcon, CheckIcon, PlayIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
@@ -13,26 +13,29 @@ export default function HomeClient() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [postsError, setPostsError] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    setIsAuthenticated(isAuthed());
   }, []);
 
   useEffect(() => {
-    // 加载热门小说
-    if (!isAuthed()) {
-      loadPosts();
+    // 加载小说种子
+    if (!isAuthenticated) {
+      loadStories();
     }
-  }, [isAuthed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
-  const loadPosts = async () => {
+  const loadStories = async () => {
     setLoading(true);
     setPostsError(null);
     try {
-      const res = await listPosts({ page: 0, size: 6 });
+      const res = await listStories({ page: 0, size: 6 });
       setPosts(res?.content || []);
     } catch (error) {
-      console.error('加载热门小说失败:', error);
+      console.error('加载小说种子失败:', error);
       setPosts([]);
       setPostsError(error?.message || '加载失败');
     } finally {
@@ -42,7 +45,7 @@ export default function HomeClient() {
 
   if (!mounted) return null;
 
-  if (!isAuthed()) {
+  if (!isAuthenticated) {
     return (
       <div className="w-full h-full">
         {/* Hero 区 */}
@@ -52,7 +55,7 @@ export default function HomeClient() {
               用 AI 找灵感，写出你的小说
             </h1>
             <p className="text-lg md:text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">
-              和 AI 对话获取灵感 → 存到灵感库 → 选灵感「开始创作」写小说
+              和 AI 对话获取灵感 → 存到灵感库 → 选灵感开始写小说
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4 mb-12">
               <Link href="/register" className="px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
@@ -61,10 +64,26 @@ export default function HomeClient() {
               <Link href="/login" className="px-6 py-3 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 font-medium rounded-lg border border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-colors">
                 登录
               </Link>
-              <Link href="/posts" className="px-6 py-3 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-medium rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                先逛逛热门小说
+              <Link href="/stories?filter=interactive" className="px-6 py-3 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors shadow-lg shadow-amber-500/30">
+                体验 AI 续写 → 去选小说
               </Link>
             </div>
+          </div>
+        </section>
+
+        {/* 体验 AI 续写 */}
+        <section className="py-12 px-4 bg-amber-50 dark:bg-amber-900/20">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-2xl md:text-3xl font-bold text-amber-800 dark:text-amber-300 mb-4">
+              体验 AI 续写
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-2xl mx-auto">
+              选剧情走向，AI 写下一章。你的选择决定故事的发展方向。
+            </p>
+            <Link href="/stories?filter=interactive" className="inline-flex items-center gap-2 px-6 py-3 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors">
+              去选小说
+              <ChevronRightIcon className="h-5 w-5" />
+            </Link>
           </div>
         </section>
 
@@ -86,20 +105,20 @@ export default function HomeClient() {
               </div>
               <div className="text-center">
                 <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckIcon className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                  <BookOpenIcon className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">保存到灵感库</h3>
+                <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">写小说</h3>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  将有价值的灵感保存到个人灵感库，随时查看
+                  创作完整小说或只写开头，让读者参与续写
                 </p>
               </div>
               <div className="text-center">
-                <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <BookOpenIcon className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">✨</span>
                 </div>
-                <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">选灵感开始写</h3>
+                <h3 className="font-semibold text-amber-700 dark:text-amber-400 mb-2">AI 互动续写</h3>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  从灵感库中选择一个灵感，开始创作你的小说
+                  选择剧情走向，AI 实时生成专属故事章节
                 </p>
               </div>
               <div className="text-center">
@@ -153,7 +172,7 @@ export default function HomeClient() {
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200">
                 热门小说
               </h2>
-              <Link href="/posts" className="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+              <Link href="/stories" className="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
                 查看更多
                 <ChevronRightIcon className="h-4 w-4" />
               </Link>
@@ -165,7 +184,7 @@ export default function HomeClient() {
             ) : postsError ? (
               <div className="text-center py-12 border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
                 <p className="text-gray-600 dark:text-gray-400 mb-4">加载失败：{postsError}</p>
-                <button onClick={loadPosts} className="btn btn-sm btn-ghost">
+                <button onClick={loadStories} className="btn btn-sm btn-ghost">
                   重试
                 </button>
               </div>
@@ -187,11 +206,11 @@ export default function HomeClient() {
                       {post.tags && post.tags.length > 0 ? post.tags.join(' · ') : '未分类'} · {new Date(post.createdAt).toLocaleDateString('zh-CN')}
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4">
-                      {excerpt(post.contentMarkdown, 100)}
+                      {excerpt(post.contentMarkdown || post.openingMarkdown, 100)}
                     </p>
                     <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>作者：{post.author?.username ?? post.authorUsername ?? '匿名'}</span>
-                      <Link href={`/posts/${post.slug}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                      <Link href={`/stories/${post.slug}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
                         阅读更多
                       </Link>
                     </div>

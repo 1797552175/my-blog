@@ -1,0 +1,19 @@
+{
+  "name": "my-blog-api-tests",
+  "version": "1.0.0",
+  "description": "API 自动化测试脚本",
+  "scripts": {
+    "test": "node api-test.js",
+    "test:report": "node api-test.js --report",
+    "test:ci": "node api-test.js --ci --report",
+    "test:complete": "node api-test-complete.js",
+    "test:complete:report": "node api-test-complete.js --report",
+    "test:complete:ci": "node api-test-complete.js --ci --report",
+    "test:complete:seed": "node api-test-complete.js --seed --report",
+    "test:all": "npm run test && npm run test:complete",
+    "test:junit": "node api-test-complete.js --ci --junit=test-reports/junit.xml"
+  },
+  "keywords": ["api", "test", "automation"],
+  "author": "",
+  "license": "MIT"
+}

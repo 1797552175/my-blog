@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 
 public record InspirationCreateRequest(
         @Size(max = 200) String title,
-        @NotNull @Valid List<MessageItem> messages
+        @Valid List<MessageItem> messages
 ) {
     public record MessageItem(
             @NotNull @Size(max = 20) String role,

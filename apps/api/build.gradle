@@ -28,12 +28,19 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.3.3'
+    runtimeOnly 'com.h2database:h2'
 
     implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
 
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+
+    // Jackson 日期时间模块，支持 Java 8 日期时间类型
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // Token计算（OpenAI tiktoken Java实现）
+    implementation 'com.knuddels:jtokkit:1.1.0'
 
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
@@ -47,4 +54,39 @@ tasks.named('test') {
 // 本地 start-api.ps1 通过 env.local 设置的环境变量，需传给 bootRun 启动的 JVM
 tasks.named('bootRun') {
     environment = System.getenv()
+}
+
+// ==================== API 测试任务 ====================
+
+// 运行 API 测试（需要先启动服务）
+task apiTest(type: Exec) {
+    group = 'verification'
+    description = '运行 API 自动化测试（需要先启动服务）'
+    workingDir = rootProject.file('../scripts')
+    commandLine 'node', 'api-test.js'
+}
+
+// 运行 API 测试并生成报告
+task apiTestReport(type: Exec) {
+    group = 'verification'
+    description = '运行 API 自动化测试并生成报告'
+    workingDir = rootProject.file('../scripts')
+    commandLine 'node', 'api-test.js', '--report'
+}
+
+// 完整的集成测试：启动服务、运行测试、关闭服务
+task integrationTest {
+    group = 'verification'
+    description = '运行完整的集成测试（启动服务、测试、关闭）'
+    dependsOn 'bootRun'
+    doLast {
+        println '服务已启动，准备运行测试...'
+        // 等待服务启动
+        sleep(10000)
+        // 运行测试
+        exec {
+            workingDir = rootProject.file('../scripts')
+            commandLine 'node', 'api-test.js', '--report', '--ci'
+        }
+    }
 }

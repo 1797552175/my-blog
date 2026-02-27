@@ -1,0 +1,109 @@
+{
+  "users": [
+    {
+      "username": "test_author",
+      "email": "test_author@example.com",
+      "password": "Test123456",
+      "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0X2F1dGhvciIsImlhdCI6MTc3MjAxOTU2MiwiZXhwIjoxNzcyMTA1OTYyfQ.LmZT5-k__gdqWIBI3puwLPlsVRTnaFVkAtSd-xQyp7Q"
+    }
+  ],
+  "stories": [
+    {
+      "title": "测试小说 - 玄幻修仙",
+      "slug": "test-xuanhuan-xiuxian",
+      "description": "这是一个测试用的玄幻小说，用于自动化测试",
+      "content": "第一章：初入修仙界\n\n在一个遥远的世界...",
+      "tags": [
+        "玄幻",
+        "修仙",
+        "测试"
+      ],
+      "status": "ONGOING",
+      "isInteractive": true,
+      "id": 15
+    },
+    {
+      "title": "测试小说 - 都市异能",
+      "slug": "test-dushi-yineng",
+      "description": "这是一个测试用的都市异能小说",
+      "content": "第一章：觉醒\n\n平凡的一天...",
+      "tags": [
+        "都市",
+        "异能",
+        "测试"
+      ],
+      "status": "COMPLETED",
+      "isInteractive": false,
+      "id": 16
+    },
+    {
+      "title": "测试小说 - 科幻未来",
+      "slug": "test-kehuan-weilai",
+      "description": "这是一个测试用的科幻小说",
+      "content": "第一章：星际旅行\n\n公元3000年...",
+      "tags": [
+        "科幻",
+        "未来",
+        "测试"
+      ],
+      "status": "ONGOING",
+      "isInteractive": true,
+      "id": 17
+    }
+  ],
+  "storySeeds": [],
+  "chapters": [
+    {
+      "title": "第一章：开篇",
+      "content": "这是第一章的内容...",
+      "chapterNumber": 1,
+      "id": 15,
+      "storyId": 15
+    },
+    {
+      "title": "第二章：发展",
+      "content": "这是第二章的内容...",
+      "chapterNumber": 2,
+      "id": 16,
+      "storyId": 15
+    },
+    {
+      "title": "第三章：高潮",
+      "content": "这是第三章的内容...",
+      "chapterNumber": 3,
+      "id": 17,
+      "storyId": 15
+    }
+  ],
+  "wikiPages": [],
+  "wikiCharacters": [
+    {
+      "name": "主角张三",
+      "description": "本书主角，天赋异禀",
+      "roleType": "PROTAGONIST",
+      "id": 7,
+      "storyId": 15
+    },
+    {
+      "name": "反派李四",
+      "description": "大反派，阴险狡诈",
+      "roleType": "ANTAGONIST",
+      "id": 8,
+      "storyId": 15
+    }
+  ],
+  "wikiTimeline": [],
+  "inspirations": [
+    {
+      "title": "修仙灵感1",
+      "content": "主角获得神秘宝物，开始修炼之路...",
+      "id": 4
+    },
+    {
+      "title": "都市灵感1",
+      "content": "主角意外觉醒异能，生活发生巨变...",
+      "id": 5
+    }
+  ],
+  "posts": []
+}

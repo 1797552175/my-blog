@@ -12,7 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { streamChat, addInspiration } from '../services/ai';
 import { list as listInspirations, getById, deleteById } from '../services/inspirations';
-import { listPosts, listMyPosts } from '../services/posts';
+import { listStories, listMyStories } from '../services/stories';
 import HomePostList from './HomePostList';
 import { useToast } from './Toast';
 
@@ -84,10 +84,10 @@ export default function HomeAiInspirationLayout() {
     setPostsLoading(true);
     setPostsError(null);
     try {
-      const res = await listPosts({ page: 0, size: 6 });
+      const res = await listStories({ page: 0, size: 6 });
       setPosts(res?.content ?? []);
     } catch (error) {
-      console.error('加载热门小说失败:', error);
+      console.error('加载小说种子失败:', error);
       setPosts([]);
       setPostsError(error?.message || '加载失败');
     } finally {
@@ -99,7 +99,7 @@ export default function HomeAiInspirationLayout() {
     setMyPostsLoading(true);
     setMyPostsError(null);
     try {
-      const res = await listMyPosts({ page: 0, size: 2 });
+      const res = await listMyStories({ page: 0, size: 2 });
       setMyPosts(res?.content ?? []);
     } catch (error) {
       console.error('加载我的小说失败:', error);
@@ -672,13 +672,13 @@ export default function HomeAiInspirationLayout() {
         />
       )}
       
-      {/* 热门小说推荐 */}
+      {/* 小说种子推荐 */}
       <HomePostList 
         posts={posts} 
         loading={postsLoading} 
         error={postsError}
         onRetry={loadPosts}
-        title="热门小说推荐" 
+        title="小说种子推荐" 
       />
       
       {/* 保存到灵感库弹窗 */}

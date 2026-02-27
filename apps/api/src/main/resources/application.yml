@@ -31,7 +31,15 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      port: ${REDIS_PORT:16379}
+      connect-timeout: 5000
+      timeout: 5000
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1
 
 # AI 配置（OpenAI 兼容接口）
 ai:
@@ -50,3 +58,228 @@ jwt:
 logging:
   level:
     org.springframework.security: INFO
+
+# 小说级RAG系统 - 意图分析关键字配置
+rag:
+  intent:
+    keywords:
+      # 简单查询关键字（不需要检索，直接用预压缩摘要）
+      simple:
+        - keyword: "继续"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "接下来"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "之后"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "然后"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "发展"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "故事"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "正常"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "普通"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "一般"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "标准"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "默认"
+          weight: 1
+          description: "正常剧情推进"
+        - keyword: "探索"
+          weight: 1
+          description: "探索剧情"
+        - keyword: "前进"
+          weight: 1
+          description: "推进剧情"
+        - keyword: "行动"
+          weight: 1
+          description: "采取行动"
+      
+      # 复杂查询关键字（需要RAG检索原文）
+      complex:
+        - keyword: "为什么"
+          weight: 2
+          description: "询问原因，需要背景知识"
+        - keyword: "怎么"
+          weight: 2
+          description: "询问方式，需要细节"
+        - keyword: "如何"
+          weight: 2
+          description: "询问方式，需要细节"
+        - keyword: "什么"
+          weight: 2
+          description: "询问具体信息"
+        - keyword: "谁"
+          weight: 2
+          description: "询问人物"
+        - keyword: "哪里"
+          weight: 2
+          description: "询问地点"
+        - keyword: "细节"
+          weight: 2
+          description: "需要精确细节"
+        - keyword: "具体"
+          weight: 2
+          description: "需要精确细节"
+        - keyword: "精确"
+          weight: 2
+          description: "需要精确细节"
+        - keyword: "准确"
+          weight: 2
+          description: "需要精确细节"
+        - keyword: "原文"
+          weight: 3
+          description: "需要引用原文"
+        - keyword: "之前"
+          weight: 1
+          description: "涉及过去内容"
+        - keyword: "以前"
+          weight: 1
+          description: "涉及过去内容"
+        - keyword: "当时"
+          weight: 1
+          description: "涉及过去内容"
+        - keyword: "记得"
+          weight: 1
+          description: "涉及过去内容"
+        - keyword: "说过"
+          weight: 1
+          description: "涉及过去内容"
+        - keyword: "武器"
+          weight: 1
+          description: "涉及物品细节"
+        - keyword: "道具"
+          weight: 1
+          description: "涉及物品细节"
+        - keyword: "能力"
+          weight: 1
+          description: "涉及设定细节"
+        - keyword: "技能"
+          weight: 1
+          description: "涉及设定细节"
+        - keyword: "设定"
+          weight: 1
+          description: "涉及设定细节"
+        - keyword: "属性"
+          weight: 2
+          description: "需要属性细节"
+        - keyword: "来历"
+          weight: 2
+          description: "需要背景信息"
+        - keyword: "历史"
+          weight: 1
+          description: "涉及历史"
+      
+      # 时间范围关键字
+      time-recent:
+        - keyword: "现在"
+          weight: 1
+        - keyword: "当前"
+          weight: 1
+        - keyword: "刚刚"
+          weight: 1
+        - keyword: "刚才"
+          weight: 1
+      
+      time-medium:
+        - keyword: "之前"
+          weight: 1
+        - keyword: "当时"
+          weight: 1
+        - keyword: "曾经"
+          weight: 1
+        - keyword: "以前说过"
+          weight: 1
+      
+      time-long:
+        - keyword: "很久"
+          weight: 1
+        - keyword: "最初"
+          weight: 1
+        - keyword: "开始"
+          weight: 1
+        - keyword: "以前很久"
+          weight: 1
+        - keyword: "远古"
+          weight: 1
+      
+      # 实体类型关键字
+      entity-character:
+        - keyword: "谁"
+          weight: 1
+        - keyword: "角色"
+          weight: 1
+        - keyword: "人物"
+          weight: 1
+        - keyword: "他"
+          weight: 1
+        - keyword: "她"
+          weight: 1
+      
+      entity-location:
+        - keyword: "哪里"
+          weight: 1
+        - keyword: "地点"
+          weight: 1
+        - keyword: "地方"
+          weight: 1
+        - keyword: "位置"
+          weight: 1
+        - keyword: "场景"
+          weight: 1
+      
+      entity-item:
+        - keyword: "什么"
+          weight: 1
+        - keyword: "物品"
+          weight: 1
+        - keyword: "道具"
+          weight: 1
+        - keyword: "武器"
+          weight: 1
+        - keyword: "装备"
+          weight: 1
+        - keyword: "法宝"
+          weight: 2
+        - keyword: "丹药"
+          weight: 1
+      
+      entity-organization:
+        - keyword: "组织"
+          weight: 1
+        - keyword: "势力"
+          weight: 1
+        - keyword: "门派"
+          weight: 1
+        - keyword: "家族"
+          weight: 1
+        - keyword: "宗门"
+          weight: 1
+    
+    # 意图分析阈值配置
+    thresholds:
+      complex-score: 3        # complexScore >= 3 判定为 COMPLEX
+      simple-score: 2         # simpleScore >= 2 判定为 SIMPLE
+      high-confidence: 0.8    # 置信度 > 0.8 跳过AI分析
+    
+    # Prompt构建配置
+    prompt:
+      budget:
+        total: 8000           # 总Token预算
+        output-reserve: 2000  # 输出预留
+        worldbuilding: 0.25   # 世界观占比 25%
+        history: 0.60         # 历史剧情占比 60%
+        choice: 0.15          # 读者选择占比 15%

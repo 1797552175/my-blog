@@ -21,24 +21,31 @@ import com.example.api.ai.dto.ChatRequest;
 import com.example.api.ai.dto.ChatResponse;
 import com.example.api.ai.dto.PersonaChatRequest;
 import com.example.api.ai.dto.PersonaChatResponse;
+import com.example.api.ai.dto.GenerateOptionsRequest;
+import com.example.api.ai.dto.GenerateOptionsResponse;
+import com.example.api.ai.dto.GenerateChapterRequest;
+import com.example.api.ai.dto.GenerateChapterResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.api.common.ApiException;
 import com.example.api.persona.UserPersonaProfile;
 import com.example.api.persona.UserPersonaProfileRepository;
-import com.example.api.post.Post;
-import com.example.api.post.PostRepository;
+import com.example.api.story.Story;
+import com.example.api.story.StoryRepository;
 import com.example.api.user.User;
 import com.example.api.user.UserRepository;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/ai")
 public class AiController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AiController.class);
     private static final int POST_SUMMARY_TRUNCATE = 300;
     private static final String SESSION_ID_HEADER = "X-Session-Id";
     
@@ -54,7 +61,7 @@ public class AiController {
     private final PersonaChatCache personaChatCache;
     private final UserRepository userRepository;
     private final UserPersonaProfileRepository personaProfileRepository;
-    private final PostRepository postRepository;
+    private final StoryRepository storyRepository;
     private final ObjectMapper objectMapper;
 
     public AiController(
@@ -62,13 +69,13 @@ public class AiController {
             PersonaChatCache personaChatCache,
             UserRepository userRepository,
             UserPersonaProfileRepository personaProfileRepository,
-            PostRepository postRepository,
+            StoryRepository storyRepository,
             ObjectMapper objectMapper) {
         this.aiChatService = aiChatService;
         this.personaChatCache = personaChatCache;
         this.userRepository = userRepository;
         this.personaProfileRepository = personaProfileRepository;
-        this.postRepository = postRepository;
+        this.storyRepository = storyRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -162,7 +169,7 @@ public class AiController {
      * 已登录用户 AI 对话（流式返回）。需 JWT。
      */
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public void streamChat(@Valid @RequestBody ChatRequest request, HttpServletResponse response) throws IOException {
+    public void streamChat(@Valid @RequestBody ChatRequest request, HttpServletResponse response) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         if (username == null || username.isBlank()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
@@ -177,29 +184,34 @@ public class AiController {
         response.setHeader("Cache-Control", "no-cache");
         response.setHeader("Connection", "keep-alive");
 
-        aiChatService.streamChat(history, userContent, systemPrompt, model, new AiChatService.StreamChatCallback() {
-            @Override
-            public void onChunk(String chunk) {
-                try {
-                    writeSSEChunk(response, chunk);
-                } catch (IOException e) {
-                    // 客户端断开连接，停止发送
+        try {
+            aiChatService.streamChat(history, userContent, systemPrompt, model, new AiChatService.StreamChatCallback() {
+                @Override
+                public void onChunk(String chunk) {
+                    try {
+                        writeSSEChunk(response, chunk);
+                    } catch (IOException e) {
+                        // 客户端断开连接，停止发送
+                    }
                 }
-            }
 
-            @Override
-            public void onComplete() {
-                safeWriteDoneOrError(response, "data: [DONE]");
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-                if (throwable != null) {
-                    org.slf4j.LoggerFactory.getLogger(AiController.class).warn("AI stream error: {}", throwable.getMessage(), throwable);
+                @Override
+                public void onComplete() {
+                    safeWriteDoneOrError(response, "data: [DONE]");
                 }
-                safeWriteDoneOrError(response, "data: [ERROR]");
-            }
-        });
+
+                @Override
+                public void onError(Throwable throwable) {
+                    if (throwable != null) {
+                        org.slf4j.LoggerFactory.getLogger(AiController.class).warn("AI stream error: {}", throwable.getMessage(), throwable);
+                    }
+                    safeWriteDoneOrError(response, "data: [ERROR]");
+                }
+            });
+        } catch (IOException e) {
+            // AI 服务未配置或不可用，返回 503
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI 服务暂时不可用");
+        }
     }
 
     /**
@@ -244,11 +256,11 @@ public class AiController {
         if (author.getPersonaPrompt() != null && !author.getPersonaPrompt().isBlank()) {
             systemBuilder.append(author.getPersonaPrompt()).append("\n");
         }
-        if (request.postId() != null) {
-            postRepository.findById(request.postId()).ifPresent(post -> {
-                if (post.isPublished() && post.getAuthor().getId().equals(authorId)) {
-                    systemBuilder.append("当前文章摘要：").append(post.getTitle()).append("\n");
-                    String body = post.getContentMarkdown();
+        if (request.storyId() != null) {
+            storyRepository.findById(request.storyId()).ifPresent(story -> {
+                if (story.isPublished() && story.getAuthor().getId().equals(authorId)) {
+                    systemBuilder.append("当前小说摘要：").append(story.getTitle()).append("\n");
+                    String body = story.getStorySummary();
                     if (body != null && body.length() > POST_SUMMARY_TRUNCATE) {
                         body = body.substring(0, POST_SUMMARY_TRUNCATE) + "...";
                     }
@@ -317,11 +329,11 @@ public class AiController {
         if (author.getPersonaPrompt() != null && !author.getPersonaPrompt().isBlank()) {
             systemBuilder.append(author.getPersonaPrompt()).append("\n");
         }
-        if (request.postId() != null) {
-            postRepository.findById(request.postId()).ifPresent(post -> {
-                if (post.isPublished() && post.getAuthor().getId().equals(authorId)) {
-                    systemBuilder.append("当前文章摘要：").append(post.getTitle()).append("\n");
-                    String body = post.getContentMarkdown();
+        if (request.storyId() != null) {
+            storyRepository.findById(request.storyId()).ifPresent(story -> {
+                if (story.isPublished() && story.getAuthor().getId().equals(authorId)) {
+                    systemBuilder.append("当前小说摘要：").append(story.getTitle()).append("\n");
+                    String body = story.getStorySummary();
                     if (body != null && body.length() > POST_SUMMARY_TRUNCATE) {
                         body = body.substring(0, POST_SUMMARY_TRUNCATE) + "...";
                     }
@@ -372,5 +384,62 @@ public class AiController {
                 safeWriteDoneOrError(response, "data: [ERROR]");
             }
         });
+    }
+
+    /**
+     * 生成故事发展选项
+     */
+    @PostMapping("/generate-options")
+    public GenerateOptionsResponse generateOptions(@Valid @RequestBody GenerateOptionsRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (username == null || username.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+
+        String systemPrompt = "你是一个专业的小说创作助手，擅长为小说生成不同的发展方向选项。";
+        String userContent = request.getPrompt();
+
+        try {
+            String content = aiChatService.chat(List.of(), userContent, systemPrompt);
+            
+            // 解析AI返回的JSON格式选项（AI返回的是数组）
+            List<GenerateOptionsResponse.StoryOption> options = objectMapper.readValue(
+                content, 
+                new com.fasterxml.jackson.core.type.TypeReference<List<GenerateOptionsResponse.StoryOption>>() {}
+            );
+            return new GenerateOptionsResponse(options);
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AiController.class).warn("解析AI选项失败: {}", e.getMessage());
+            // 如果解析失败，返回默认选项
+            return new GenerateOptionsResponse(List.of(
+                new GenerateOptionsResponse.StoryOption(1, "继续冒险", "主角继续探索未知的世界"),
+                new GenerateOptionsResponse.StoryOption(2, "寻找线索", "主角开始寻找关键线索"),
+                new GenerateOptionsResponse.StoryOption(3, "面对挑战", "主角遇到了新的挑战")
+            ));
+        }
+    }
+
+    /**
+     * 生成章节内容
+     */
+    @PostMapping("/generate-chapter")
+    public GenerateChapterResponse generateChapter(@Valid @RequestBody GenerateChapterRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (username == null || username.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+
+        String systemPrompt = "你是一个专业的小说创作助手，擅长根据章节内容和选择方向生成连贯的下一章内容。";
+        String userContent = request.getPrompt();
+
+        try {
+            logger.info("开始生成章节，用户: {}, prompt长度: {}", username, userContent != null ? userContent.length() : 0);
+            String content = aiChatService.chat(List.of(), userContent, systemPrompt);
+            logger.info("章节生成成功，内容长度: {}", content != null ? content.length() : 0);
+            return new GenerateChapterResponse(content);
+        } catch (Exception e) {
+            logger.error("生成章节失败", e);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "生成章节失败: " + e.getMessage());
+        }
     }
 }

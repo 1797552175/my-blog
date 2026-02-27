@@ -1,9 +1,11 @@
 package com.example.api.common;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -23,6 +25,20 @@ public class GlobalExceptionHandler {
 
     /** 仅向客户端返回安全文案，不包含堆栈、异常类型或内部路径等敏感信息。 */
     private static final String INTERNAL_ERROR_MESSAGE = "服务器内部错误";
+
+    private final Environment environment;
+
+    public GlobalExceptionHandler(Environment environment) {
+        this.environment = environment;
+    }
+
+    /** 开发/本地环境时在 500 响应中附带异常信息，便于排查 */
+    private boolean isDevOrLocal() {
+        if (environment == null) return false;
+        String[] profiles = environment.getActiveProfiles();
+        return Arrays.stream(profiles).anyMatch(p ->
+                "dev".equals(p) || "h2".equals(p) || "local".equals(p) || "default".equals(p));
+    }
 
     private static String getRequestId(HttpServletRequest request) {
         if (request == null) return null;
@@ -76,7 +92,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleOther(Exception ex, HttpServletRequest request) {
         String requestId = getRequestId(request);
         log.error("500 internal_error requestId={}", requestId, ex);
+        Map<String, ?> extra = null;
+        if (isDevOrLocal()) {
+            String detail = ex.getClass().getSimpleName() + ": " + (ex.getMessage() != null ? ex.getMessage() : "");
+            extra = Map.of("detail", detail);
+        }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(body(INTERNAL_ERROR_MESSAGE, requestId, null));
+                .body(body(INTERNAL_ERROR_MESSAGE, requestId, extra));
     }
 }

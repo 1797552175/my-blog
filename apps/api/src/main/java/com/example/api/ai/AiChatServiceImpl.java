@@ -71,6 +71,8 @@ public class AiChatServiceImpl implements AiChatService {
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Authorization", "Bearer " + apiKey);
             connection.setDoOutput(true);
+            connection.setConnectTimeout(30000); // 30秒连接超时
+            connection.setReadTimeout(60000); // 60秒读取超时
 
             connection.getOutputStream().write(body.toString().getBytes(StandardCharsets.UTF_8));
 
@@ -95,16 +97,15 @@ public class AiChatServiceImpl implements AiChatService {
                 }
             }
         } catch (Exception e) {
-            // 解析失败时返回空，避免打断调用方
+            throw new RuntimeException("AI服务调用失败: " + e.getMessage(), e);
         }
-        return "";
+        throw new RuntimeException("AI服务返回无效响应");
     }
 
     @Override
     public void streamChat(List<ChatMessage> history, String userContent, String systemPrompt, String targetModel, StreamChatCallback callback) throws IOException {
         if (apiUrl == null || apiUrl.isBlank() || apiKey.isBlank()) {
-            callback.onComplete();
-            return;
+            throw new IOException("AI 服务未配置");
         }
 
         List<Map<String, String>> messages = new ArrayList<>();

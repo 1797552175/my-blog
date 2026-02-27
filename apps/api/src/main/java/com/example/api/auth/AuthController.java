@@ -16,6 +16,7 @@ import com.example.api.auth.dto.AuthResponse;
 import com.example.api.auth.dto.ChangePasswordRequest;
 import com.example.api.auth.dto.LoginRequest;
 import com.example.api.auth.dto.RegisterRequest;
+import com.example.api.auth.dto.RegisterResponse;
 import com.example.api.auth.dto.UpdateProfileRequest;
 import com.example.api.auth.dto.UserMeResponse;
 import com.example.api.common.ApiException;
@@ -44,7 +45,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public void register(@Valid @RequestBody RegisterRequest request) {
+    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.CONFLICT, "用户名已被使用");
         }
@@ -53,7 +54,8 @@ public class AuthController {
         }
 
         User user = new User(request.username(), request.email(), passwordEncoder.encode(request.password()));
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        return new RegisterResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail());
     }
 
     @PostMapping("/login")
@@ -66,7 +68,7 @@ public class AuthController {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "密码错误");
         }
         String token = jwtTokenProvider.generateToken(user);
-        return new AuthResponse(token, request.username());
+        return new AuthResponse(token, user.getUsername());
     }
 
     @GetMapping("/me")

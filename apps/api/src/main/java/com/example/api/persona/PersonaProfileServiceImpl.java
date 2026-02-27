@@ -4,36 +4,37 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.api.ai.AiChatService;
-import com.example.api.post.Post;
-import com.example.api.post.PostRepository;
+import com.example.api.story.Story;
+import com.example.api.story.StoryRepository;
 import com.example.api.user.User;
 import com.example.api.user.UserRepository;
 
 @Service
 public class PersonaProfileServiceImpl implements PersonaProfileService {
 
-    private static final int MAX_POSTS_FOR_DISTILL = 20;
+    private static final int MAX_STORIES_FOR_DISTILL = 20;
     private static final int CONTENT_TRUNCATE_LEN = 500;
     private static final String DISTILL_SYSTEM_PROMPT =
-            "请根据以下该作者已发布文章的标题与正文摘要，提炼该作者的写作风格、常写话题、语言特点，输出一段 200 字以内的描述。";
+            "请根据以下该作者已发布小说的标题与简介，提炼该作者的写作风格、常写话题、语言特点，输出一段 200 字以内的描述。";
 
     private final UserPersonaProfileRepository personaProfileRepository;
-    private final PostRepository postRepository;
+    private final StoryRepository storyRepository;
     private final UserRepository userRepository;
     private final AiChatService aiChatService;
 
     public PersonaProfileServiceImpl(
             UserPersonaProfileRepository personaProfileRepository,
-            PostRepository postRepository,
+            StoryRepository storyRepository,
             UserRepository userRepository,
             AiChatService aiChatService) {
         this.personaProfileRepository = personaProfileRepository;
-        this.postRepository = postRepository;
+        this.storyRepository = storyRepository;
         this.userRepository = userRepository;
         this.aiChatService = aiChatService;
     }
@@ -46,8 +47,9 @@ public class PersonaProfileServiceImpl implements PersonaProfileService {
             return;
         }
 
-        List<Post> published = postRepository.findByAuthor_IdAndPublishedTrueOrderByUpdatedAtDesc(
-                authorId, PageRequest.of(0, MAX_POSTS_FOR_DISTILL));
+        Page<Story> publishedPage = storyRepository.findByAuthor_IdAndPublishedTrueOrderByUpdatedAtDesc(
+                authorId, PageRequest.of(0, MAX_STORIES_FOR_DISTILL));
+        List<Story> published = publishedPage.getContent();
 
         String distilledContent = buildDistilledContent(published);
 
@@ -61,14 +63,14 @@ public class PersonaProfileServiceImpl implements PersonaProfileService {
         personaProfileRepository.save(profile);
     }
 
-    private String buildDistilledContent(List<Post> published) {
+    private String buildDistilledContent(List<Story> published) {
         if (published == null || published.isEmpty()) {
             return "";
         }
         StringBuilder input = new StringBuilder();
-        for (Post p : published) {
-            input.append("【").append(p.getTitle()).append("】");
-            String content = p.getContentMarkdown();
+        for (Story s : published) {
+            input.append("【").append(s.getTitle()).append("】");
+            String content = s.getStorySummary();
             if (content != null && content.length() > CONTENT_TRUNCATE_LEN) {
                 content = content.substring(0, CONTENT_TRUNCATE_LEN) + "...";
             }

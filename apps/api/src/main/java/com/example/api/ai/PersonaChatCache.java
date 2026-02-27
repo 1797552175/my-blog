@@ -37,14 +37,19 @@ public class PersonaChatCache {
      */
     public List<ChatMessage> get(String sessionId, Long authorId) {
         String k = key(sessionId, authorId);
-        String raw = redisTemplate.opsForValue().get(k);
-        if (raw == null || raw.isBlank()) {
-            return new ArrayList<>();
-        }
         try {
-            List<ChatMessage> list = objectMapper.readValue(raw, new TypeReference<List<ChatMessage>>() {});
-            return list != null ? list : new ArrayList<>();
+            String raw = redisTemplate.opsForValue().get(k);
+            if (raw == null || raw.isBlank()) {
+                return new ArrayList<>();
+            }
+            try {
+                List<ChatMessage> list = objectMapper.readValue(raw, new TypeReference<List<ChatMessage>>() {});
+                return list != null ? list : new ArrayList<>();
+            } catch (Exception e) {
+                return new ArrayList<>();
+            }
         } catch (Exception e) {
+            // Redis连接失败，返回空列表
             return new ArrayList<>();
         }
     }

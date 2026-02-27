@@ -4,7 +4,7 @@ import java.util.List;
 
 public record PersonaChatRequest(
         Long authorId,
-        Long postId,
+        Long storyId,
         List<ChatMessage> messages,
         String content
 ) {

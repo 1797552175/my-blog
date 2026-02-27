@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState(null);
   const [profileSuccess, setProfileSuccess] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [personaPrompt, setPersonaPrompt] = useState('');
   const [personaEnabled, setPersonaEnabled] = useState(true);
@@ -39,7 +41,13 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
-    if (!isAuthed()) {
+    setIsMounted(true);
+    setIsAuthenticated(isAuthed());
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    if (!isAuthenticated) {
       router.replace('/login?next=/me/settings');
       return;
     }
@@ -61,10 +69,10 @@ export default function SettingsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [router]);
+  }, [router, isAuthenticated, isMounted]);
 
   useEffect(() => {
-    if (!isAuthed()) return;
+    if (!isMounted || !isAuthenticated) return;
     let cancelled = false;
     (async () => {
       try {
@@ -73,13 +81,13 @@ export default function SettingsPage() {
           setModels(data);
         }
       } catch (err) {
-        if (!cancelled) setModelsError(err?.message ?? '加载模型列表失败');
+        if (!cancelled) setModelsError(err?.message ?? '加载失败');
       } finally {
         if (!cancelled) setModelsLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [isMounted, isAuthenticated]);
 
   async function onSaveProfile(e) {
     e.preventDefault();
@@ -151,7 +159,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (!isAuthed()) return null;
+  if (!isMounted || !isAuthenticated) return null;
   if (profileLoading) {
     return (
       <div className="max-w-xl mx-auto">
@@ -348,7 +356,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="text-sm text-zinc-500 dark:text-zinc-400">
-        <Link href="/me/posts" className="text-primary-600 dark:text-primary-400 hover:underline">← 返回我的小说</Link>
+        <Link href="/me/stories" className="text-primary-600 dark:text-primary-400 hover:underline">← 返回我的小说</Link>
       </div>
     </div>
   );

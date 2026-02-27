@@ -48,13 +48,13 @@ export default function SearchForm({ defaultValue = '', className = '', placehol
     addRecent(q);
     setRecent(getRecent());
     setShowRecent(false);
-    router.push(`/posts?q=${encodeURIComponent(q)}`);
+    router.push(`/stories?q=${encodeURIComponent(q)}`);
   }
 
   function useRecent(q) {
     setValue(q);
     setShowRecent(false);
-    router.push(`/posts?q=${encodeURIComponent(q)}`);
+    router.push(`/stories?q=${encodeURIComponent(q)}`);
   }
 
   return (

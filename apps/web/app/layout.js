@@ -1,5 +1,6 @@
 import './globals.css';
 import Layout from '../components/Layout';
+import ProgressBarProvider from '../components/ProgressBarProvider';
 
 export const metadata = {
   title: 'My Blog',
@@ -10,7 +11,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className="min-h-screen">
-        <Layout>{children}</Layout>
+        <ProgressBarProvider>
+          <Layout>{children}</Layout>
+        </ProgressBarProvider>
       </body>
     </html>
   );

@@ -1,0 +1,117 @@
+# AI 编码助手规则
+
+## 项目概述
+这是一个基于 Spring Boot + Next.js 的 AI 小说创作与互动阅读平台。
+
+## API 自动化测试维护规则
+
+### ⚠️ 重要：每次添加/修改接口后必须执行
+
+当你添加或修改了后端 API 接口时，**必须**同步更新自动化测试脚本。
+
+### 执行步骤
+
+1. **添加/修改接口后，立即运行扫描脚本：**
+   ```bash
+   cd scripts
+   node scan-api-and-generate-tests.js --generate
+   ```
+
+2. **查看生成的测试代码：**
+   - 检查 `scripts/generated-tests.js`
+   - 检查 `scripts/AI_PROMPT.md`
+
+3. **将新测试添加到 `api-test-complete.js`：**
+   - 在对应的 TestSuite 类中添加测试方法
+   - 或创建新的 TestSuite 类
+
+4. **运行测试验证：**
+   ```bash
+   node api-test-complete.js
+   ```
+
+### 测试代码规范
+
+每个新接口必须包含至少一个测试：
+
+```javascript
+// 示例：添加新接口测试
+await this.test('GET /api/new-endpoint 应该正常工作', async () => {
+  const res = await makeRequest('/api/new-endpoint', { token: authToken });
+  assert.statusOk(res);
+  assert.hasField(res.body, 'expectedField');
+});
+```
+
+### 测试覆盖要求
+
+- **公开接口**（无需认证）：测试返回状态和数据格式
+- **认证接口**（需要登录）：使用 `authToken` 进行测试
+- **POST/PUT/DELETE**：测试成功状态和错误处理
+- **路径参数**：使用实际 ID 或 slug 进行测试
+
+### 文件位置
+
+- 测试脚本：`scripts/api-test-complete.js`
+- 扫描工具：`scripts/scan-api-and-generate-tests.js`
+- 生成的测试：`scripts/generated-tests.js`
+- AI 提示：`scripts/AI_PROMPT.md`
+
+### 记住
+
+> 没有测试的接口 = 技术债务
+> 
+> 每次编码后问自己："我添加测试了吗？"
+
+## 后端服务启动与数据库连接规则
+
+### ⚠️ 重要：启动后端服务必须使用此脚本
+
+当你需要启动后端服务或连接数据库时，**必须**使用以下脚本：
+
+```powershell
+# 启动后端服务和连接数据库
+.\scripts\start-api.ps1
+```
+
+### 脚本功能
+
+- **启动后端服务**：运行 Spring Boot 应用程序
+- **配置数据库连接**：自动配置数据库连接参数
+- **环境变量设置**：加载必要的环境变量
+- **日志输出**：显示详细的启动日志
+
+### 执行步骤
+
+1. **打开 PowerShell 终端**
+2. **导航到项目根目录**：
+   ```powershell
+   cd c:\Users\huqicheng\Documents\think\my-blog
+   ```
+3. **运行启动脚本**：
+   ```powershell
+   .\scripts\start-api.ps1
+   ```
+4. **等待服务启动**：脚本会自动处理依赖项和启动过程
+5. **验证服务状态**：检查终端输出，确认服务是否成功启动
+
+### 注意事项
+
+- **不要手动启动**：避免使用 `gradlew.bat bootRun` 直接启动，因为这可能会缺少必要的环境配置
+- **环境变量**：脚本会自动加载 `.env.local` 文件中的环境变量
+- **数据库连接**：脚本会根据配置自动连接到指定的数据库
+- **端口占用**：如果端口 8080 被占用，脚本会尝试使用其他端口
+
+### 故障排除
+
+如果启动失败，请检查以下几点：
+1. 确保脚本文件存在：`scripts/start-api.ps1`
+2. 确保 `.env.local` 文件配置正确
+3. 检查端口 8080 是否被占用
+4. 查看终端输出的错误信息
+
+### 记住
+
+> 启动后端服务 = 使用 .\scripts\start-api.ps1 脚本
+> 
+> 每次启动服务前问自己："我使用正确的脚本了吗？"
