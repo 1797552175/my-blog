@@ -5,6 +5,7 @@ import com.example.api.storyseed.dto.StoryBranchPointResponse;
 import com.example.api.user.User;
 
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 
@@ -44,13 +45,15 @@ public record StoryResponse(
         // 分支点
         List<StoryBranchPointResponse> branchPoints,
 
-        Instant createdAt,
-        Instant updatedAt
+        String createdAt,
+        String updatedAt
 ) {
 
     public static StoryResponse fromEntity(Story story) {
         return fromEntity(story, false);
     }
+
+    private static final DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
 
     public static StoryResponse fromEntity(Story story, boolean starredByCurrentUser) {
         return new StoryResponse(
@@ -74,8 +77,8 @@ public record StoryResponse(
                 story.getInspiration() != null ? story.getInspiration().getTitle() : null,
                 story.getTags() != null ? story.getTags() : Collections.emptyList(),
                 Collections.emptyList(),
-                story.getCreatedAt(),
-                story.getUpdatedAt()
+                story.getCreatedAt() != null ? formatter.format(story.getCreatedAt()) : null,
+                story.getUpdatedAt() != null ? formatter.format(story.getUpdatedAt()) : null
         );
     }
 }

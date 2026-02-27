@@ -4,6 +4,7 @@ import com.example.api.story.Story;
 import com.example.api.user.User;
 
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -24,7 +25,7 @@ public record StoryListItemResponse(
         String storySummary,
         String authorUsername,
         List<String> tags,
-        Instant createdAt
+        String createdAt
 ) {
 
     public static StoryListItemResponse fromEntity(Story story) {
@@ -34,6 +35,8 @@ public record StoryListItemResponse(
     /**
      * 列表场景使用：不访问 story.chapters，避免懒加载异常（open-in-view: false 时）
      */
+    private static final DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
+
     public static StoryListItemResponse fromEntity(Story story, boolean hasContent) {
         User author = story.getAuthor();
         List<String> tags = story.getTags();
@@ -52,7 +55,7 @@ public record StoryListItemResponse(
                 story.getStorySummary(),
                 author != null ? author.getUsername() : null,
                 tags != null ? tags : List.of(),
-                story.getCreatedAt()
+                story.getCreatedAt() != null ? formatter.format(story.getCreatedAt()) : null
         );
     }
 }
