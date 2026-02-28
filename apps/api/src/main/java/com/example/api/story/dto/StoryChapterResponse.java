@@ -10,6 +10,7 @@ public record StoryChapterResponse(
         int sortOrder,
         String title,
         String contentMarkdown,
+        Boolean published,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -20,6 +21,7 @@ public record StoryChapterResponse(
                 c.getSortOrder(),
                 c.getTitle(),
                 c.getContentMarkdown(),
+                c.getPublished(),
                 c.getCreatedAt(),
                 c.getUpdatedAt()
         );

@@ -1,6 +1,7 @@
 package com.example.api.rag;
 
 import com.example.api.readerfork.StoryCommit;
+import com.example.api.story.Story;
 import com.example.api.storyseed.StoryCharacter;
 import com.example.api.storyseed.StoryCharacterRepository;
 import com.example.api.storyseed.StoryReadme;
@@ -53,15 +54,37 @@ public class SmartWorldbuildingSelector {
 
     public SelectedWorldbuilding selectRelevantWorldbuilding(
             StorySeed seed,
+            Story story,
             List<StoryCommit> commits,
             int budget) {
 
         long startTime = System.currentTimeMillis();
 
-        List<StoryCharacter> allCharacters = characterRepository
-                .findByStorySeed_IdOrderBySortOrderAsc(seed.getId());
-        List<StoryTerm> allTerms = termRepository
-                .findByStorySeed_IdOrderBySortOrderAsc(seed.getId());
+        // 同时从 StorySeed 和 Story 获取数据（兼容新旧数据）
+        List<StoryCharacter> allCharacters = new ArrayList<>();
+        List<StoryTerm> allTerms = new ArrayList<>();
+        
+        // 尝试从 StorySeed 获取
+        allCharacters.addAll(characterRepository
+                .findByStorySeed_IdOrderBySortOrderAsc(seed.getId()));
+        allTerms.addAll(termRepository
+                .findByStorySeed_IdOrderBySortOrderAsc(seed.getId()));
+        
+        // 如果 Story 存在，从 Story 获取
+        if (story != null) {
+            allCharacters.addAll(characterRepository
+                    .findByStory_IdOrderBySortOrderAsc(story.getId()));
+            allTerms.addAll(termRepository
+                    .findByStory_IdOrderBySortOrderAsc(story.getId()));
+        }
+        
+        // 去重（基于ID）
+        allCharacters = allCharacters.stream()
+                .distinct()
+                .collect(Collectors.toList());
+        allTerms = allTerms.stream()
+                .distinct()
+                .collect(Collectors.toList());
 
         if (allCharacters.isEmpty() && allTerms.isEmpty()) {
             return new SelectedWorldbuilding(List.of(), List.of(), "");
@@ -104,7 +127,11 @@ public class SmartWorldbuildingSelector {
         String readmeContent = "";
         int readmeBudget = budget - usedTokens;
         if (readmeBudget > 200) {
+            // 同时从 StorySeed 和 Story 获取 README（兼容新旧数据）
             StoryReadme readme = readmeRepository.findByStorySeed_Id(seed.getId()).orElse(null);
+            if (readme == null && story != null) {
+                readme = readmeRepository.findByStory_Id(story.getId()).orElse(null);
+            }
             if (readme != null && readme.getContentMarkdown() != null) {
                 readmeContent = tokenBudgetManager.truncateToBudget(
                         readme.getContentMarkdown(), readmeBudget);
@@ -203,8 +230,8 @@ public class SmartWorldbuildingSelector {
                     JsonNode locations = objectMapper.readTree(summary.getLocationsInvolved());
                     if (locations.isArray()) {
                         for (JsonNode locNode : locations) {
-                            if (locNode.has("name")) {
-                                names.add(locNode.get("name").asText());
+                            if (locNode.isTextual()) {
+                                names.add(locNode.asText());
                             }
                         }
                     }
@@ -234,8 +261,8 @@ public class SmartWorldbuildingSelector {
                     JsonNode items = objectMapper.readTree(summary.getItemsInvolved());
                     if (items.isArray()) {
                         for (JsonNode itemNode : items) {
-                            if (itemNode.has("name")) {
-                                names.add(itemNode.get("name").asText());
+                            if (itemNode.isTextual()) {
+                                names.add(itemNode.asText());
                             }
                         }
                     }
@@ -250,10 +277,15 @@ public class SmartWorldbuildingSelector {
 
     private int countMentionsInCommits(String name, List<StoryCommit> commits) {
         int count = 0;
+        String lowerName = name.toLowerCase();
         for (StoryCommit commit : commits) {
-            if (commit.getContentMarkdown() != null &&
-                    commit.getContentMarkdown().contains(name)) {
-                count++;
+            if (commit.getContentMarkdown() != null) {
+                String content = commit.getContentMarkdown().toLowerCase();
+                int index = 0;
+                while ((index = content.indexOf(lowerName, index)) != -1) {
+                    count++;
+                    index += lowerName.length();
+                }
             }
         }
         return count;
@@ -262,28 +294,28 @@ public class SmartWorldbuildingSelector {
     private int estimateCharacterTokens(StoryCharacter character) {
         int length = character.getName().length();
         if (character.getDescription() != null) {
-            length += Math.min(character.getDescription().length(), 100);
+            length += character.getDescription().length();
         }
-        return length / 2 + 10;
+        return length / 4 + 10;
     }
 
     private int estimateTermTokens(StoryTerm term) {
-        int length = term.getName().length() + term.getTermType().length();
+        int length = term.getName().length();
         if (term.getDefinition() != null) {
-            length += Math.min(term.getDefinition().length(), 80);
+            length += term.getDefinition().length();
         }
-        return length / 2 + 10;
-    }
-
-    public record ScoredCharacter(StoryCharacter character, double score) {
-    }
-
-    public record ScoredTerm(StoryTerm term, double score) {
+        return length / 4 + 8;
     }
 
     public record SelectedWorldbuilding(
             List<StoryCharacter> characters,
             List<StoryTerm> terms,
             String readmeContent) {
+    }
+
+    private record ScoredCharacter(StoryCharacter character, double score) {
+    }
+
+    private record ScoredTerm(StoryTerm term, double score) {
     }
 }

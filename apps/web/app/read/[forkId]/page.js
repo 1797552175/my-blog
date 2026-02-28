@@ -1,12 +1,13 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { getStorySeedBySlug } from '../../../services/storySeeds';
-import { getFork, listCommits, choose, rollback, createPullRequest, listBookmarks, createBookmark, deleteBookmark, rollbackToBranchPoint } from '../../../services/readerForks';
+import { getFork, listCommits, choose, rollback, createPullRequest, listBookmarks, createBookmark, deleteBookmark, rollbackToBranchPoint, saveAiPreview, getAiPreview, deleteAiPreviewChapter, generateAiPreviewSummary } from '../../../services/readerForks';
 import { listChaptersBySlug } from '../../../services/stories';
+import { generateDirectionOptions, streamAiWrite } from '../../../services/aiWriting';
 import { isAuthed } from '../../../services/auth';
 import { api } from '../../../lib/api';
 import { useToast } from '../../../components/Toast';
@@ -40,13 +41,16 @@ export default function ReadPage() {
   const [rollbackTarget, setRollbackTarget] = useState(null);
   const [showChapterList, setShowChapterList] = useState(false); // 章节目录显示状态
   const [showLastChapterHint, setShowLastChapterHint] = useState(false); // 是否显示最后一章提示
-  const [showAIOptions, setShowAIOptions] = useState(false); // 是否显示AI选项
-  const [aiOptions, setAIOptions] = useState([]); // AI生成的选项
-  const [generatingAIOptions, setGeneratingAIOptions] = useState(false); // 是否正在生成AI选项
-  const [generatingNextChapter, setGeneratingNextChapter] = useState(false); // 是否正在生成下一章
-  const [generatedChapterContent, setGeneratedChapterContent] = useState(null); // AI生成的章节内容
-  const [generatingStage, setGeneratingStage] = useState(''); // 生成阶段：'thinking' | 'writing' | 'polishing' | 'completing'
-  const [generatingChapterNumber, setGeneratingChapterNumber] = useState(null); // 正在生成的章节号
+  const [showDirectionModal, setShowDirectionModal] = useState(false); // 是否显示方向选择弹窗
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // 是否显示删除确认弹窗
+  const [deletingChapter, setDeletingChapter] = useState(null); // 正在删除的章节信息
+  const [directionOptions, setDirectionOptions] = useState([]); // 故事走向选项
+  const [loadingDirectionOptions, setLoadingDirectionOptions] = useState(false); // 是否正在加载选项
+  const [aiPreviewChapters, setAiPreviewChapters] = useState([]); // AI预览章节列表
+  const [generatingChapter, setGeneratingChapter] = useState(false); // 是否正在生成章节
+  const [generatingStage, setGeneratingStage] = useState(''); // 生成阶段：'analyzing' | 'generating' | 'polishing' | 'completing'
+  const [isProcessingSummary, setIsProcessingSummary] = useState(false); // 是否正在处理摘要
+  const abortControllerRef = useRef(null); // 用于取消生成
 
   const load = useCallback(async () => {
     if (!forkId) return;
@@ -81,6 +85,44 @@ export default function ReadPage() {
         }
       } else {
         setAuthorChapters([]);
+      }
+      
+      // 加载AI预览章节
+      try {
+        const previewData = await getAiPreview(forkId);
+        if (previewData && Array.isArray(previewData.chapters)) {
+          const chapters = previewData.chapters.map(ch => ({
+            ...ch,
+            isPreview: true,
+          }));
+          setAiPreviewChapters(chapters);
+          
+          // 检查是否有未生成摘要的章节
+          const chaptersWithoutSummary = chapters.filter(ch => !ch.summary && ch.contentMarkdown);
+          if (chaptersWithoutSummary.length > 0) {
+            // 开始处理所有未生成摘要的章节
+            setIsProcessingSummary(true);
+            // 依次为每个章节生成摘要
+            for (const ch of chaptersWithoutSummary) {
+              try {
+                await generateAiPreviewSummary(forkId, ch.chapterNumber);
+              } catch (e) {
+                console.error(`生成章节${ch.chapterNumber}摘要失败:`, e);
+              }
+            }
+            // 刷新预览章节列表
+            const updatedPreview = await getAiPreview(forkId);
+            if (updatedPreview && Array.isArray(updatedPreview.chapters)) {
+              setAiPreviewChapters(updatedPreview.chapters.map(ch => ({
+                ...ch,
+                isPreview: true,
+              })));
+            }
+            setIsProcessingSummary(false);
+          }
+        }
+      } catch (err) {
+        console.error('加载AI预览章节失败:', err);
       }
     } catch (err) {
       console.error('加载失败:', err);
@@ -262,70 +304,199 @@ export default function ReadPage() {
     );
   }
 
-  async function handleGenerateAIOptions() {
-    setGeneratingAIOptions(true);
+  // 打开方向选择弹窗
+  async function openDirectionModal() {
+    if (!fork?.storyId) {
+      setError('无法获取小说信息，该阅读分支未关联小说');
+      return;
+    }
+    setShowDirectionModal(true);
+    setLoadingDirectionOptions(true);
+    setDirectionOptions([]);
     setError(null);
     try {
-      const currentChapterContent = currentChapterIndex < authorChapters.length 
-        ? authorChapters[currentChapterIndex]?.contentMarkdown 
-        : commits[currentChapterIndex - authorChapters.length]?.contentMarkdown;
+      // 计算上下文范围：当前已读的所有章节
+      const contextUpToSortOrder = currentChapterIndex < authorChapters.length 
+        ? currentChapterIndex + 1 
+        : authorChapters.length + commits.length;
       
-      const currentChapterTitle = currentChapterIndex < authorChapters.length
-        ? authorChapters[currentChapterIndex]?.title
-        : `第 ${commits[currentChapterIndex - authorChapters.length]?.sortOrder} 章`;
+      // 构建AI预览章节摘要列表（用于上下文）
+      const aiPreviewSummaries = aiPreviewChapters.map(ch => ({
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        summary: ch.summary || null,
+      }));
       
-      const prompt = `根据以下章节内容，生成3-4个不同的故事发展方向选项，每个选项应该简洁明了，不超过20个字：
-
-章节标题：${currentChapterTitle}
-章节内容：${currentChapterContent?.substring(0, 500)}...
-
-请以JSON格式返回，格式如下：
-[
-  {"id": 1, "label": "选项1", "description": "简短描述"},
-  {"id": 2, "label": "选项2", "description": "简短描述"},
-  {"id": 3, "label": "选项3", "description": "简短描述"}
-]`;
-
-      const data = await api.post('/ai/generate-options', { prompt });
-      setAIOptions(data.options || []);
-      setShowAIOptions(true);
-    } catch (err) {
-      setError(err?.message ?? '生成选项失败');
+      const opts = await generateDirectionOptions(fork.storyId, contextUpToSortOrder, aiPreviewSummaries);
+      // generateDirectionOptions 已经返回了 options 数组
+      setDirectionOptions(Array.isArray(opts) ? opts : []);
+    } catch (e) {
+      addToast(e?.message ?? '获取选项失败');
     } finally {
-      setGeneratingAIOptions(false);
+      setLoadingDirectionOptions(false);
     }
   }
 
-  async function handleSelectAIOption(option) {
-    setGeneratingNextChapter(true);
+  // 选择故事走向并生成章节
+  async function handleSelectDirection(selectedOption) {
+    if (!fork?.storyId || generatingChapter) return;
+    setShowDirectionModal(false);
     setError(null);
-    try {
-      const currentChapterContent = currentChapterIndex < authorChapters.length 
-        ? authorChapters[currentChapterIndex]?.contentMarkdown 
-        : commits[currentChapterIndex - authorChapters.length]?.contentMarkdown;
-      
-      const currentChapterTitle = currentChapterIndex < authorChapters.length
-        ? authorChapters[currentChapterIndex]?.title
-        : `第 ${commits[currentChapterIndex - authorChapters.length]?.sortOrder} 章`;
-      
-      const prompt = `根据以下章节内容和选择的方向，生成下一章的内容：
+    
+    // 计算下一章的章节号
+    const nextChapterNumber = authorChapters.length + commits.length + aiPreviewChapters.length + 1;
+    const defaultTitle = `第${nextChapterNumber}章 ${selectedOption?.title || '续写'}`;
+    
+    // 立即创建一个空的预览章节（用于显示加载状态）
+    const newPreviewChapter = {
+      chapterNumber: nextChapterNumber,
+      title: defaultTitle,
+      contentMarkdown: '',
+      summary: null,
+      summaryGenerating: false,
+      isPreview: true,
+      isGenerating: true, // 标记正在生成
+      createdAt: Date.now(),
+    };
+    
+    // 添加到预览章节列表并立即跳转
+    setAiPreviewChapters((prev) => [...prev, newPreviewChapter]);
+    setCurrentChapterIndex(authorChapters.length + commits.length + aiPreviewChapters.length);
+    
+    // 开始生成
+    setGeneratingChapter(true);
+    setGeneratingStage('analyzing');
+    
+    // 创建 AbortController 用于取消请求
+    abortControllerRef.current = new AbortController();
+    
+    // 构建AI预览章节摘要列表（用于上下文）
+    const aiPreviewSummariesForContent = aiPreviewChapters.map(ch => ({
+      chapterNumber: ch.chapterNumber,
+      title: ch.title,
+      summary: ch.summary || null,
+    }));
+    
+    const params = {
+      storyId: fork.storyId,
+      type: 'from_setting',
+      selectedDirectionTitle: selectedOption?.title || '',
+      selectedDirectionDescription: selectedOption?.description || '',
+      wordCount: 1000,
+      aiPreviewSummaries: aiPreviewSummariesForContent,
+    };
 
-章节标题：${currentChapterTitle}
-章节内容：${currentChapterContent}
+    let accumulatedContent = '';
+    let generatedTitle = '';
 
-选择的发展方向：${option.label}
-方向描述：${option.description}
-
-请生成一个完整的章节内容，字数在500-1000字之间，保持故事连贯性。`;
-
-      const data = await api.post('/ai/generate-chapter', { prompt });
-      setGeneratedChapterContent(data.content || '');
-      setShowAIOptions(false);
-    } catch (err) {
-      setError(err?.message ?? '生成章节失败');
-    } finally {
-      setGeneratingNextChapter(false);
-    }
+    streamAiWrite(
+      params,
+      (chunk) => {
+        // 确保 chunk 是字符串
+        const chunkStr = typeof chunk === 'string' ? chunk : String(chunk ?? '');
+        accumulatedContent += chunkStr;
+        
+        // 更新预览章节的内容（流式更新）
+        setAiPreviewChapters((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex].chapterNumber === nextChapterNumber) {
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              contentMarkdown: accumulatedContent,
+            };
+          }
+          return updated;
+        });
+        
+        setGeneratingStage((prev) => {
+          if (prev === 'analyzing') return 'generating';
+          return prev;
+        });
+      },
+      async () => {
+        setGeneratingStage('completing');
+        
+        // 从生成的内容中提取标题（第一行）
+        const lines = accumulatedContent.split('\n');
+        const firstLine = lines[0].trim();
+        if (firstLine.startsWith('第') && firstLine.includes('章')) {
+          generatedTitle = firstLine;
+          accumulatedContent = lines.slice(1).join('\n').trim();
+        } else {
+          generatedTitle = defaultTitle;
+        }
+        
+        // 保存到 Redis
+        try {
+          await saveAiPreview(forkId, {
+            chapterNumber: nextChapterNumber,
+            title: generatedTitle,
+            contentMarkdown: accumulatedContent,
+          });
+          
+          // 更新预览章节列表
+          setAiPreviewChapters((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            if (lastIndex >= 0 && updated[lastIndex].chapterNumber === nextChapterNumber) {
+              updated[lastIndex] = {
+                ...updated[lastIndex],
+                title: generatedTitle,
+                contentMarkdown: accumulatedContent,
+                isGenerating: false,
+                summaryGenerating: true,
+              };
+            }
+            return updated;
+          });
+          
+          addToast('章节生成完成');
+          
+          // 开始处理所有未生成摘要的章节
+          setIsProcessingSummary(true);
+          
+          try {
+            // 为当前章节生成摘要
+            await generateAiPreviewSummary(forkId, nextChapterNumber);
+            
+            // 刷新预览章节列表以获取更新后的摘要
+            const updatedPreview = await getAiPreview(forkId);
+            if (updatedPreview && Array.isArray(updatedPreview.chapters)) {
+              setAiPreviewChapters(updatedPreview.chapters.map(ch => ({
+                ...ch,
+                isPreview: true,
+              })));
+            }
+          } catch (summaryErr) {
+            console.error('摘要生成失败:', summaryErr);
+            // 即使失败也解除阻塞，让用户可以继续操作
+          } finally {
+            setIsProcessingSummary(false);
+          }
+        } catch (err) {
+          console.error('保存预览章节失败:', err);
+          addToast('保存预览失败，但内容已生成');
+        }
+        
+        setTimeout(() => {
+          setGeneratingChapter(false);
+          setGeneratingStage('');
+        }, 500);
+      },
+      (error) => {
+        setGeneratingChapter(false);
+        setGeneratingStage('');
+        setError(error?.message || '生成失败');
+        addToast(error?.message || '生成失败');
+        
+        // 移除正在生成的章节
+        setAiPreviewChapters((prev) => prev.filter(ch => ch.chapterNumber !== nextChapterNumber));
+        // 跳转回上一章
+        setCurrentChapterIndex(Math.max(0, authorChapters.length + commits.length + aiPreviewChapters.length - 1));
+      },
+      abortControllerRef.current.signal
+    );
   }
 
   if (loading || !fork) {
@@ -571,7 +742,10 @@ export default function ReadPage() {
                 <li key={ch.id}>
                   <button
                     type="button"
-                    onClick={() => setCurrentChapterIndex(index)}
+                    onClick={() => {
+                      setCurrentChapterIndex(index);
+                      setShowChapterList(false);
+                    }}
                     className={`text-left w-full px-3 py-1.5 rounded ${currentChapterIndex === index ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`}
                   >
                     {ch.title}
@@ -582,11 +756,43 @@ export default function ReadPage() {
                 <li key={c.id}>
                   <button
                     type="button"
-                    onClick={() => setCurrentChapterIndex(authorChapters.length + index)}
+                    onClick={() => {
+                      setCurrentChapterIndex(authorChapters.length + index);
+                      setShowChapterList(false);
+                    }}
                     className={`text-left w-full px-3 py-1.5 rounded ${currentChapterIndex === authorChapters.length + index ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`}
                   >
-                    第 {c.sortOrder} 章{/* 这里可以添加章节标题逻辑 */}
+                    第 {c.sortOrder} 章
                   </button>
+                </li>
+              ))}
+              {aiPreviewChapters.map((ch, index) => (
+                <li key={`ai-preview-${ch.chapterNumber}`}>
+                  <div className={`flex items-center justify-between rounded ${currentChapterIndex === authorChapters.length + commits.length + index ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200' : 'hover:bg-zinc-100 dark:hover:bg-zinc-700/50'}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrentChapterIndex(authorChapters.length + commits.length + index);
+                        setShowChapterList(false);
+                      }}
+                      className="text-left flex-1 px-3 py-1.5 flex items-center gap-2"
+                    >
+                      <span>{ch.title || `第${ch.chapterNumber}章`}</span>
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">AI生成</span>
+                    </button>
+                    {index === aiPreviewChapters.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeletingChapter({ index, chapterNumber: ch.chapterNumber, title: ch.title });
+                          setShowDeleteConfirm(true);
+                        }}
+                        className="px-2 py-1 mr-2 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                      >
+                        删除
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -595,92 +801,46 @@ export default function ReadPage() {
 
         {/* 当前章节内容 */}
         <div className="mb-8">
-          {choosing && generatingChapterNumber ? (
-            <div className="p-8 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-full bg-indigo-100 dark:bg-indigo-900/40">
-                  <div className="w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-                <h3 className="text-xl font-semibold text-indigo-800 dark:text-indigo-200 mb-2">
-                  正在生成第 {generatingChapterNumber} 章
-                </h3>
-                <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-4">
-                  AI 正在为你创作精彩内容，请稍候...
-                </p>
-                <div className="max-w-md mx-auto space-y-2">
-                  <div className="flex items-center gap-3 text-sm">
-                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                      generatingStage === 'thinking' || generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
-                    }`}>
-                      {generatingStage === 'thinking' || generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '1'}
-                    </div>
-                    <span className={generatingStage === 'thinking' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
-                      正在思考剧情发展...
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                      generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
-                    }`}>
-                      {generatingStage === 'writing' || generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '2'}
-                    </div>
-                    <span className={generatingStage === 'writing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
-                      正在撰写章节内容...
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                      generatingStage === 'polishing' || generatingStage === 'completing'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
-                    }`}>
-                      {generatingStage === 'polishing' || generatingStage === 'completing' ? '✓' : '3'}
-                    </div>
-                    <span className={generatingStage === 'polishing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
-                      正在润色完善...
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                      generatingStage === 'completing'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-indigo-200 dark:bg-indigo-800 text-indigo-600 dark:text-indigo-400'
-                    }`}>
-                      {generatingStage === 'completing' ? '✓' : '4'}
-                    </div>
-                    <span className={generatingStage === 'completing' ? 'font-medium text-indigo-800 dark:text-indigo-200' : 'text-zinc-600 dark:text-zinc-400'}>
-                      即将完成...
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-6 max-w-md mx-auto">
-                  <div className="h-2 bg-indigo-200 dark:bg-indigo-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 dark:bg-indigo-400 animate-pulse transition-all duration-1000" style={{ width: '60%' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : authorChapters.length > 0 || commits.length > 0 ? (
+          {authorChapters.length > 0 || commits.length > 0 || aiPreviewChapters.length > 0 ? (
             currentChapterIndex < authorChapters.length ? (
               <div>
                 <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 mb-4">{authorChapters[currentChapterIndex]?.title || '未命名章节'}</h2>
                 <div className="prose dark:prose-invert max-w-none">
-                  <ReactMarkdown>{authorChapters[currentChapterIndex]?.contentMarkdown ?? ''}</ReactMarkdown>
+                  <ReactMarkdown>{typeof authorChapters[currentChapterIndex]?.contentMarkdown === 'string' ? authorChapters[currentChapterIndex].contentMarkdown : String(authorChapters[currentChapterIndex]?.contentMarkdown ?? '')}</ReactMarkdown>
                 </div>
               </div>
-            ) : (
+            ) : currentChapterIndex < authorChapters.length + commits.length ? (
               <div>
                 {commits[currentChapterIndex - authorChapters.length]?.optionLabel ? (
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">你的选择：{commits[currentChapterIndex - authorChapters.length].optionLabel}</p>
                 ) : null}
                 <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 mb-4">第 {commits[currentChapterIndex - authorChapters.length]?.sortOrder} 章</h2>
                 <div className="prose dark:prose-invert max-w-none">
-                  <ReactMarkdown>{commits[currentChapterIndex - authorChapters.length]?.contentMarkdown ?? ''}</ReactMarkdown>
+                  <ReactMarkdown>{typeof commits[currentChapterIndex - authorChapters.length]?.contentMarkdown === 'string' ? commits[currentChapterIndex - authorChapters.length].contentMarkdown : String(commits[currentChapterIndex - authorChapters.length]?.contentMarkdown ?? '')}</ReactMarkdown>
                 </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 text-xs rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300">AI生成</span>
+                  {aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.isGenerating && (
+                    <span className="flex items-center gap-1 text-xs text-indigo-500 dark:text-indigo-400">
+                      <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-500 rounded-full animate-spin" />
+                      生成中...
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 mb-4">{aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.title || 'AI生成章节'}</h2>
+                {aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.isGenerating && !aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.contentMarkdown ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin mb-4" />
+                    <p className="text-zinc-500 dark:text-zinc-400">AI 正在创作中...</p>
+                  </div>
+                ) : (
+                  <div className="prose dark:prose-invert max-w-none">
+                    <ReactMarkdown>{typeof aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.contentMarkdown === 'string' ? aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length].contentMarkdown : String(aiPreviewChapters[currentChapterIndex - authorChapters.length - commits.length]?.contentMarkdown ?? '')}</ReactMarkdown>
+                  </div>
+                )}
               </div>
             )
           ) : (
@@ -701,12 +861,12 @@ export default function ReadPage() {
             ← 上一章
           </button>
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            {currentChapterIndex + 1} / {authorChapters.length + commits.length}
+            {currentChapterIndex + 1} / {authorChapters.length + commits.length + aiPreviewChapters.length}
           </span>
           <button
             type="button"
-            onClick={() => setCurrentChapterIndex(prev => Math.min(authorChapters.length + commits.length - 1, prev + 1))}
-            disabled={currentChapterIndex === authorChapters.length + commits.length - 1}
+            onClick={() => setCurrentChapterIndex(prev => Math.min(authorChapters.length + commits.length + aiPreviewChapters.length - 1, prev + 1))}
+            disabled={currentChapterIndex === authorChapters.length + commits.length + aiPreviewChapters.length - 1}
             className="btn btn-sm disabled:opacity-50"
           >
             下一章 →
@@ -715,100 +875,25 @@ export default function ReadPage() {
       </div>
 
       {/* 最后一章提示和AI生成选项 */}
-      {currentChapterIndex === authorChapters.length + commits.length - 1 && (
+      {currentChapterIndex === authorChapters.length + commits.length + aiPreviewChapters.length - 1 && !generatingChapter && (
         <div className="mb-6 p-6 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20">
           <div className="text-center mb-4">
-            <h3 className="text-lg font-semibold text-indigo-800 dark:text-indigo-200 mb-2">这是最后一章</h3>
-            <p className="text-sm text-indigo-600 dark:text-indigo-400">想要继续阅读吗？AI可以为你生成后续故事发展的选项</p>
-          </div>
-          {!showAIOptions && !generatedChapterContent && (
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={handleGenerateAIOptions}
-                disabled={generatingAIOptions}
-                className="btn btn-primary"
-              >
-                {generatingAIOptions ? '生成中…' : '生成故事发展选项'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* AI生成的选项 */}
-      {showAIOptions && aiOptions.length > 0 && (
-        <div className="mb-6 card p-6">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">选择故事发展方向</h3>
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">请选择一个选项，AI 将为你生成下一章内容：</p>
-          </div>
-          <div className="space-y-3">
-            {aiOptions.map((option, index) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => handleSelectAIOption(option)}
-                disabled={generatingNextChapter}
-                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                  generatingNextChapter
-                    ? 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 opacity-50 cursor-not-allowed'
-                    : 'border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-semibold text-sm">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-zinc-800 dark:text-zinc-200 mb-1">
-                      {option.label}
-                    </p>
-                    {option.description && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {option.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => setShowAIOptions(false)}
-              className="btn btn-sm btn-ghost"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* AI生成的章节内容 */}
-      {generatedChapterContent && (
-        <div className="mb-6 card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">AI生成的下一章</h3>
-            <button
-              type="button"
-              onClick={() => {
-                setGeneratedChapterContent(null);
-                setShowAIOptions(false);
-              }}
-              className="btn btn-sm btn-ghost"
-            >
-              关闭
-            </button>
-          </div>
-          <div className="prose dark:prose-invert max-w-none">
-            <ReactMarkdown>{generatedChapterContent}</ReactMarkdown>
-          </div>
-          <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
-              ⚠️ 注意：AI生成的内容仅供预览，不会保存到数据库中。如果您喜欢这个内容，可以手动复制保存。
+            <h3 className="text-lg font-semibold text-indigo-800 dark:text-indigo-200 mb-2">
+              {aiPreviewChapters.length > 0 ? '想要继续阅读吗？' : '这是最后一章'}
+            </h3>
+            <p className="text-sm text-indigo-600 dark:text-indigo-400">
+              AI可以为你生成后续故事发展的选项
             </p>
+          </div>
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={openDirectionModal}
+              disabled={loadingDirectionOptions || isProcessingSummary}
+              className="btn btn-primary"
+            >
+              {isProcessingSummary ? '正在处理摘要...' : loadingDirectionOptions ? '生成中…' : '生成故事发展选项'}
+            </button>
           </div>
         </div>
       )}
@@ -886,6 +971,163 @@ export default function ReadPage() {
           </div>
         </div>
       ) : null}
+
+      {/* 故事方向选择弹窗 */}
+      {showDirectionModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" 
+          onClick={() => setShowDirectionModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-lg w-full mx-4 p-6 border border-zinc-200 dark:border-zinc-700" 
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-4">选择故事走向</h3>
+            {loadingDirectionOptions ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin mr-2" />
+                <span className="text-zinc-600 dark:text-zinc-400">正在生成选项...</span>
+              </div>
+            ) : directionOptions.length === 0 ? (
+              <div className="text-center py-6 space-y-4">
+                <p className="text-zinc-500 dark:text-zinc-400">暂无选项，可直接生成。</p>
+                <div className="flex gap-2 justify-center">
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={() => handleSelectDirection(null)}
+                  >
+                    直接生成
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost" 
+                    onClick={() => setShowDirectionModal(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                  请选择一个故事发展方向，AI将为你生成下一章内容：
+                </p>
+                <ul className="space-y-3 mb-4">
+                  {directionOptions.map((opt, index) => {
+                    // 防御性处理：确保 title 和 description 是字符串
+                    const title = typeof opt?.title === 'string' ? opt.title : String(opt?.title || '');
+                    const description = typeof opt?.description === 'string' ? opt.description : String(opt?.description || '');
+                    return (
+                      <li key={index}>
+                        <button
+                          type="button"
+                          className="w-full text-left p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"
+                          onClick={() => handleSelectDirection(opt)}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center font-semibold text-sm">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                                {title}
+                              </p>
+                              {description && (
+                                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                                  {description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="flex gap-2 justify-center">
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost" 
+                    onClick={openDirectionModal} 
+                    disabled={loadingDirectionOptions}
+                  >
+                    换一换
+                  </button>
+                  <button 
+                    type="button" 
+                    className="btn btn-ghost" 
+                    onClick={() => setShowDirectionModal(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认弹窗 */}
+      {showDeleteConfirm && deletingChapter && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" 
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-sm w-full mx-4 border border-zinc-200 dark:border-zinc-700 overflow-hidden" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-center text-zinc-800 dark:text-zinc-200 mb-2">
+                删除AI生成章节
+              </h3>
+              <p className="text-sm text-center text-zinc-500 dark:text-zinc-400 mb-6">
+                确定要删除「{deletingChapter.title || `第${deletingChapter.chapterNumber}章`}」吗？此操作无法撤销。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeletingChapter(null);
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                  onClick={async () => {
+                    try {
+                      await deleteAiPreviewChapter(forkId, deletingChapter.chapterNumber);
+                      setAiPreviewChapters((prev) => prev.filter((_, i) => i !== deletingChapter.index));
+                      // 如果当前正在查看被删除的章节，跳转到上一章
+                      if (currentChapterIndex >= authorChapters.length + commits.length + deletingChapter.index) {
+                        setCurrentChapterIndex(Math.max(0, currentChapterIndex - 1));
+                      }
+                      addToast('已删除AI生成章节');
+                    } catch (err) {
+                      addToast(err?.message || '删除失败');
+                    } finally {
+                      setShowDeleteConfirm(false);
+                      setDeletingChapter(null);
+                    }
+                  }}
+                >
+                  确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

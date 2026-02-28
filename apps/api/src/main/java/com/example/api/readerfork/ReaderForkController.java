@@ -3,6 +3,11 @@ package com.example.api.readerfork;
 import java.io.IOException;
 import java.util.List;
 
+import com.example.api.ai.AiPreviewService;
+import com.example.api.ai.AiPreviewSummaryService;
+import com.example.api.ai.dto.AiPreviewRequest;
+import com.example.api.ai.dto.AiPreviewResponse;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,9 +40,15 @@ import jakarta.validation.Valid;
 public class ReaderForkController {
 
     private final ReaderForkService readerForkService;
+    private final AiPreviewService aiPreviewService;
+    private final AiPreviewSummaryService aiPreviewSummaryService;
 
-    public ReaderForkController(ReaderForkService readerForkService) {
+    public ReaderForkController(ReaderForkService readerForkService, 
+                                AiPreviewService aiPreviewService,
+                                AiPreviewSummaryService aiPreviewSummaryService) {
         this.readerForkService = readerForkService;
+        this.aiPreviewService = aiPreviewService;
+        this.aiPreviewSummaryService = aiPreviewSummaryService;
     }
 
     @PostMapping("/story-seeds/{storySeedId}/fork")
@@ -180,5 +191,86 @@ public class ReaderForkController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Long forkId) {
         readerForkService.deleteFork(user.getUsername(), forkId);
+    }
+
+    // ==================== AI预览章节接口 ====================
+
+    /**
+     * 保存AI预览章节
+     */
+    @PostMapping("/reader-forks/{forkId}/ai-preview")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void saveAiPreview(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Long forkId,
+            @Valid @RequestBody AiPreviewRequest request) {
+        // 验证用户是否有权限访问该fork
+        readerForkService.getFork(user.getUsername(), forkId);
+        
+        AiPreviewResponse.AiPreviewChapter chapter = new AiPreviewResponse.AiPreviewChapter(
+                request.getChapterNumber(),
+                request.getTitle(),
+                request.getContentMarkdown(),
+                System.currentTimeMillis()
+        );
+        aiPreviewService.saveAiPreview(forkId.toString(), chapter);
+    }
+
+    /**
+     * 获取AI预览章节列表
+     */
+    @GetMapping("/reader-forks/{forkId}/ai-preview")
+    public AiPreviewResponse getAiPreview(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Long forkId) {
+        // 验证用户是否有权限访问该fork
+        readerForkService.getFork(user.getUsername(), forkId);
+        
+        List<AiPreviewResponse.AiPreviewChapter> chapters = aiPreviewService.getAiPreviewChapters(forkId.toString());
+        return new AiPreviewResponse(chapters);
+    }
+
+    /**
+     * 删除AI预览章节
+     */
+    @DeleteMapping("/reader-forks/{forkId}/ai-preview")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAiPreview(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Long forkId) {
+        // 验证用户是否有权限访问该fork
+        readerForkService.getFork(user.getUsername(), forkId);
+        
+        aiPreviewService.deleteAiPreview(forkId.toString());
+    }
+
+    /**
+     * 删除指定章节号的AI预览章节
+     */
+    @DeleteMapping("/reader-forks/{forkId}/ai-preview/{chapterNumber}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAiPreviewChapter(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Long forkId,
+            @PathVariable Integer chapterNumber) {
+        // 验证用户是否有权限访问该fork
+        readerForkService.getFork(user.getUsername(), forkId);
+        
+        aiPreviewService.deleteAiPreviewChapter(forkId.toString(), chapterNumber);
+    }
+
+    /**
+     * 同步生成AI预览章节的摘要
+     */
+    @PostMapping("/reader-forks/{forkId}/ai-preview/{chapterNumber}/summary")
+    public void generateAiPreviewSummary(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Long forkId,
+            @PathVariable Integer chapterNumber) {
+        // 验证用户是否有权限访问该fork
+        readerForkService.getFork(user.getUsername(), forkId);
+        
+        // 同步生成摘要
+        aiPreviewSummaryService.generateAndSaveSummary(forkId.toString(), chapterNumber);
     }
 }

@@ -619,6 +619,21 @@
 
 ---
 
+### 3.30 story_chapter_summaries（作者章节预压缩表）
+
+| 字段名 | 类型 | 约束 | 备注 |
+|--------|------|------|------|
+| id | BIGINT | 主键、自增 | 主键 |
+| chapter_id | BIGINT | 非空、唯一、外键 | 章节 ID，关联 story_chapters.id |
+| compressed_content | TEXT | 非空 | AI 压缩后的内容；失败降级时为原文 |
+| is_fallback | BIT(1) | 非空 | 是否降级：1=存的是原文 |
+| created_at | TIMESTAMP | 非空、不可更新 | 创建时间 |
+| updated_at | TIMESTAMP | 非空 | 更新时间 |
+
+**唯一约束**：chapter_id。**外键**：chapter_id → story_chapters(id) ON DELETE CASCADE。用于发布章节时写入预压缩，前文概要与智能续写选项生成时读取。
+
+---
+
 ## 4. 前端功能（apps/web）
 
 ### 4.1 技术栈

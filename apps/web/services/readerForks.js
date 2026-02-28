@@ -109,3 +109,49 @@ export async function rollbackToBranchPoint(forkId, branchPointSortOrder) {
 export async function deleteFork(forkId) {
   return api.del(`/reader-forks/${forkId}`);
 }
+
+/**
+ * 保存AI预览章节到Redis
+ * @param {string} forkId - 阅读副本ID
+ * @param {Object} chapter - 章节信息
+ * @param {number} chapter.chapterNumber - 章节号
+ * @param {string} chapter.title - 章节标题
+ * @param {string} chapter.contentMarkdown - 章节内容
+ */
+export async function saveAiPreview(forkId, chapter) {
+  return api.post(`/reader-forks/${forkId}/ai-preview`, chapter);
+}
+
+/**
+ * 获取AI预览章节列表
+ * @param {string} forkId - 阅读副本ID
+ */
+export async function getAiPreview(forkId) {
+  return api.get(`/reader-forks/${forkId}/ai-preview`);
+}
+
+/**
+ * 删除AI预览章节
+ * @param {string} forkId - 阅读副本ID
+ */
+export async function deleteAiPreview(forkId) {
+  return api.del(`/reader-forks/${forkId}/ai-preview`);
+}
+
+/**
+ * 删除指定章节号的AI预览章节
+ * @param {string} forkId - 阅读副本ID
+ * @param {number} chapterNumber - 章节号
+ */
+export async function deleteAiPreviewChapter(forkId, chapterNumber) {
+  return api.del(`/reader-forks/${forkId}/ai-preview/${chapterNumber}`);
+}
+
+/**
+ * 触发AI预览章节的异步摘要生成
+ * @param {string} forkId - 阅读副本ID
+ * @param {number} chapterNumber - 章节号
+ */
+export async function generateAiPreviewSummary(forkId, chapterNumber) {
+  return api.post(`/reader-forks/${forkId}/ai-preview/${chapterNumber}/summary`, {});
+}

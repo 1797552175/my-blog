@@ -8,6 +8,9 @@ spring:
     # - Docker/服务器：由容器环境变量注入为 docker（见 deploy/docker-compose*.yml）
     active: ${SPRING_PROFILES_ACTIVE:default}
 
+  cache:
+    type: none # 禁用缓存
+
   datasource:
     # MariaDB 连接串（使用环境变量，方便本地/容器/服务器统一配置）
     url: jdbc:mariadb://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:blog}?useUnicode=true&characterEncoding=utf8
@@ -51,6 +54,10 @@ ai:
   api-url: ${AI_API_URL:https://api.openai.com/v1/chat/completions}
   api-key: ${AI_API_KEY:}
   model: ${AI_MODEL:gpt-4o-mini}
+  debug-log: ${DEBUG_AI_LOG:false}
+  preview:
+    # AI预览章节缓存时间（小时），默认1小时
+    ttl-hours: ${AI_PREVIEW_TTL_HOURS:1}
 
 # JWT 配置（用于登录后生成/校验 Token）
 jwt:

@@ -43,6 +43,22 @@ public interface StoryChapterRepository extends JpaRepository<StoryChapter, Long
     int countByStoryId(Long storyId);
 
     /**
+     * 获取小说的所有已发布章节（读者可见）
+     */
+    List<StoryChapter> findByStoryIdAndPublishedTrueOrderBySortOrderAsc(Long storyId);
+
+    /**
+     * 获取小说的已发布章节（限制到指定章节序号）
+     */
+    @Query("SELECT c FROM StoryChapter c WHERE c.story.id = :storyId AND c.published = true AND c.sortOrder <= :upTo ORDER BY c.sortOrder ASC")
+    List<StoryChapter> findByStoryIdAndPublishedTrueUpToSortOrder(@Param("storyId") Long storyId, @Param("upTo") int upToSortOrder);
+
+    /**
+     * 获取小说的已发布章节数量
+     */
+    int countByStoryIdAndPublishedTrue(Long storyId);
+
+    /**
      * 在给定小说 ID 中，返回至少有一个章节的小说 ID 集合（用于列表 hasContent，不加载章节内容）
      */
     @Query("SELECT DISTINCT c.story.id FROM StoryChapter c WHERE c.story.id IN :storyIds")

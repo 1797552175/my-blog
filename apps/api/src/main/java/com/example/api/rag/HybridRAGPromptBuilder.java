@@ -59,6 +59,7 @@ public class HybridRAGPromptBuilder {
      */
     public HybridPromptResult buildPrompt(
             StorySeed seed,
+            com.example.api.story.Story story,
             List<StoryCommit> commits,
             StoryOption option,
             Long forkId) {
@@ -80,15 +81,15 @@ public class HybridRAGPromptBuilder {
 
         if (intent.shouldUsePrecompressed()) {
             // 使用预压缩（快速路径）
-            prompt = buildWithPrecompressed(seed, commits, option, forkId, intent);
+            prompt = buildWithPrecompressed(seed, story, commits, option, forkId, intent);
             strategy = BuildStrategy.PRECOMPRESSED;
         } else if (intent.complexity() == Complexity.MEDIUM) {
             // 混合模式（预压缩 + 关键细节）
-            prompt = buildHybrid(seed, commits, option, forkId, intent);
+            prompt = buildHybrid(seed, story, commits, option, forkId, intent);
             strategy = BuildStrategy.HYBRID;
         } else {
             // 完整RAG（精确检索）
-            prompt = buildWithFullRAG(seed, commits, option, intent);
+            prompt = buildWithFullRAG(seed, story, commits, option, intent);
             strategy = BuildStrategy.FULL_RAG;
         }
 
@@ -108,6 +109,7 @@ public class HybridRAGPromptBuilder {
      */
     private String buildWithPrecompressed(
             StorySeed seed,
+            com.example.api.story.Story story,
             List<StoryCommit> commits,
             StoryOption option,
             Long forkId,
@@ -122,7 +124,7 @@ public class HybridRAGPromptBuilder {
         prompt.append(buildStorySummaryLayer(seed));
 
         // 3. 世界观层（智能筛选）
-        prompt.append(buildWorldbuildingLayer(seed, commits));
+        prompt.append(buildWorldbuildingLayer(seed, story, commits));
 
         // 4. 历史剧情层（预压缩）
         CompressionLevel level = determineCompressionLevel(intent);
@@ -146,6 +148,7 @@ public class HybridRAGPromptBuilder {
      */
     private String buildHybrid(
             StorySeed seed,
+            com.example.api.story.Story story,
             List<StoryCommit> commits,
             StoryOption option,
             Long forkId,
@@ -160,7 +163,7 @@ public class HybridRAGPromptBuilder {
         prompt.append(buildStorySummaryLayer(seed));
 
         // 3. 世界观层（智能筛选）
-        prompt.append(buildWorldbuildingLayer(seed, commits));
+        prompt.append(buildWorldbuildingLayer(seed, story, commits));
 
         // 4. 历史剧情层（预压缩 + 关键细节）
         int historyBudget = getAvailableBudget() - tokenBudgetManager.countTokens(prompt.toString());
@@ -183,6 +186,7 @@ public class HybridRAGPromptBuilder {
      */
     private String buildWithFullRAG(
             StorySeed seed,
+            com.example.api.story.Story story,
             List<StoryCommit> commits,
             StoryOption option,
             QueryIntent intent) {
@@ -196,7 +200,7 @@ public class HybridRAGPromptBuilder {
         prompt.append(buildStorySummaryLayer(seed));
 
         // 3. 世界观层（智能筛选）
-        prompt.append(buildWorldbuildingLayer(seed, commits));
+        prompt.append(buildWorldbuildingLayer(seed, story, commits));
 
         // 4. 历史剧情层（分层加载完整内容）
         prompt.append(buildLayeredHistory(commits, intent));
@@ -257,12 +261,12 @@ public class HybridRAGPromptBuilder {
     /**
      * 构建世界观层
      */
-    private String buildWorldbuildingLayer(StorySeed seed, List<StoryCommit> commits) {
+    private String buildWorldbuildingLayer(StorySeed seed, com.example.api.story.Story story, List<StoryCommit> commits) {
         int worldbuildingBudget = (int) (getAvailableBudget() * 
                 keywordsProperties.getPrompt().getBudget().getWorldbuilding());
         
         SelectedWorldbuilding selected = worldbuildingSelector.selectRelevantWorldbuilding(
-                seed, commits, worldbuildingBudget);
+                seed, story, commits, worldbuildingBudget);
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n【世界观设定】\n");

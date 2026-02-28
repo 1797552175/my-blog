@@ -1,5 +1,6 @@
 package com.example.api.story;
 
+import com.example.api.story.dto.PublishChapterResponse;
 import com.example.api.story.dto.StoryChapterCreateRequest;
 import com.example.api.story.dto.StoryChapterResponse;
 import com.example.api.story.dto.StoryChapterUpdateRequest;
@@ -31,12 +32,22 @@ public interface StoryChapterService {
     StoryChapterResponse createChapter(String username, Long storyId, StoryChapterCreateRequest request);
 
     /**
-     * 更新章节
+     * 更新章节（已发布章节会触发预压缩）
      */
-    StoryChapterResponse updateChapter(String username, Long storyId, Long chapterId, StoryChapterUpdateRequest request);
+    PublishChapterResponse updateChapter(String username, Long storyId, Long chapterId, StoryChapterUpdateRequest request);
 
     /**
      * 删除章节
      */
     void deleteChapter(String username, Long storyId, Long chapterId);
+
+    /**
+     * 发布章节（会触发预压缩；失败时降级存原文，warning 非空提示用户）
+     */
+    PublishChapterResponse publishChapter(String username, Long storyId, Long chapterId);
+
+    /**
+     * 取消发布章节
+     */
+    StoryChapterResponse unpublishChapter(String username, Long storyId, Long chapterId);
 }

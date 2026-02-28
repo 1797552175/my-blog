@@ -9,6 +9,9 @@ public record StoryChapterCreateRequest(
         String contentMarkdown,
 
         /** 插入位置（从1开始），不传则追加到末尾 */
-        Integer sortOrder
+        Integer sortOrder,
+
+        /** 是否直接发布，不传则默认为false（草稿） */
+        Boolean published
 ) {
 }

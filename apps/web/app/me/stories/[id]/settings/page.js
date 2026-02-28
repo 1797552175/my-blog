@@ -70,10 +70,12 @@ export default function SettingsPage() {
   const [newTermType, setNewTermType] = useState('place');
   const [newTermName, setNewTermName] = useState('');
   const [newTermDef, setNewTermDef] = useState('');
+  const [newTermTypeCustom, setNewTermTypeCustom] = useState('');
   const [editingTerm, setEditingTerm] = useState(null);
   const [editTermType, setEditTermType] = useState('place');
   const [editTermName, setEditTermName] = useState('');
   const [editTermDef, setEditTermDef] = useState('');
+  const [editTermTypeCustom, setEditTermTypeCustom] = useState('');
   const [addingTerm, setAddingTerm] = useState(false);
 
   const load = useCallback(async () => {
@@ -216,14 +218,19 @@ export default function SettingsPage() {
     setAddingTerm(true);
     setError(null);
     try {
+      const finalTermType = newTermType === 'custom' 
+        ? (newTermTypeCustom.trim() || 'other') 
+        : newTermType;
       await createTerm(id, {
-        termType: newTermType.trim() || 'place',
+        termType: finalTermType,
         name: newTermName.trim(),
         definition: newTermDef.trim() || null,
         sortOrder: terms.length,
       });
       setNewTermName('');
       setNewTermDef('');
+      setNewTermTypeCustom('');
+      setNewTermType('place');
       addToast('已添加专有名词');
       await load();
     } catch (err) {
@@ -245,13 +252,17 @@ export default function SettingsPage() {
     if (!id || !editingTerm || !editTermName.trim()) return;
     setError(null);
     try {
+      const finalTermType = editTermType === 'custom' 
+        ? (editTermTypeCustom.trim() || 'other') 
+        : editTermType;
       await updateTerm(id, editingTerm.id, {
-        termType: editTermType.trim() || 'place',
+        termType: finalTermType,
         name: editTermName.trim(),
         definition: editTermDef.trim() || null,
         sortOrder: editingTerm.sortOrder,
       });
       setEditingTerm(null);
+      setEditTermTypeCustom('');
       addToast('专有名词已更新');
       await load();
     } catch (err) {
@@ -281,10 +292,21 @@ export default function SettingsPage() {
     );
   }
 
+  const termTypeOptions = [
+    { value: 'place', label: '地名' },
+    { value: 'item', label: '物品' },
+    { value: 'skill', label: '技能' },
+    { value: 'magic', label: '魔法' },
+    { value: 'organization', label: '组织' },
+    { value: 'other', label: '其他' },
+  ];
+
   const termTypeLabels = {
     place: '地名',
     item: '物品',
     skill: '技能',
+    magic: '魔法',
+    organization: '组织',
     other: '其他',
   };
 
@@ -447,15 +469,33 @@ export default function SettingsPage() {
                 <label className="block text-xs text-zinc-500 mb-1">类型</label>
                 <select
                   value={newTermType}
-                  onChange={(e) => setNewTermType(e.target.value)}
+                  onChange={(e) => {
+                    setNewTermType(e.target.value);
+                    if (e.target.value !== 'custom') {
+                      setNewTermTypeCustom('');
+                    }
+                  }}
                   className="input w-auto min-w-[100px]"
                 >
-                  <option value="place">地名</option>
-                  <option value="item">物品</option>
-                  <option value="skill">技能</option>
-                  <option value="other">其他</option>
+                  {termTypeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                  <option value="custom">自定义...</option>
                 </select>
               </div>
+              {newTermType === 'custom' && (
+                <div className="min-w-[120px]">
+                  <label className="block text-xs text-zinc-500 mb-1">自定义类型</label>
+                  <input
+                    type="text"
+                    value={newTermTypeCustom}
+                    onChange={(e) => setNewTermTypeCustom(e.target.value)}
+                    className="input w-full"
+                    placeholder="输入自定义类型"
+                    maxLength={32}
+                  />
+                </div>
+              )}
               <div className="flex-1 min-w-[120px]">
                 <label className="block text-xs text-zinc-500 mb-1">名称</label>
                 <input
@@ -498,14 +538,31 @@ export default function SettingsPage() {
                     <form onSubmit={handleUpdateTerm} className="flex flex-wrap items-end gap-3">
                       <select
                         value={editTermType}
-                        onChange={(e) => setEditTermType(e.target.value)}
+                        onChange={(e) => {
+                          setEditTermType(e.target.value);
+                          if (e.target.value !== 'custom') {
+                            setEditTermTypeCustom('');
+                          }
+                        }}
                         className="input w-auto min-w-[100px]"
                       >
-                        <option value="place">地名</option>
-                        <option value="item">物品</option>
-                        <option value="skill">技能</option>
-                        <option value="other">其他</option>
+                        {termTypeOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                        <option value="custom">自定义...</option>
                       </select>
+                      {editTermType === 'custom' && (
+                        <div className="min-w-[120px]">
+                          <input
+                            type="text"
+                            value={editTermTypeCustom}
+                            onChange={(e) => setEditTermTypeCustom(e.target.value)}
+                            className="input w-full"
+                            placeholder="输入自定义类型"
+                            maxLength={32}
+                          />
+                        </div>
+                      )}
                       <input
                         type="text"
                         value={editTermName}

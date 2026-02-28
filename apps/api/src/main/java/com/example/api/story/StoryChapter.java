@@ -58,6 +58,10 @@ public class StoryChapter extends BaseEntity {
     @Column(name = "branch_name", length = 200)
     private String branchName;
 
+    /** 是否已发布 */
+    @Column(name = "published", nullable = false)
+    private Boolean published = false;
+
     protected StoryChapter() {
     }
 
@@ -154,6 +158,14 @@ public class StoryChapter extends BaseEntity {
 
     public void setBranchName(String branchName) {
         this.branchName = branchName;
+    }
+
+    public Boolean getPublished() {
+        return published;
+    }
+
+    public void setPublished(Boolean published) {
+        this.published = published;
     }
 
     /**

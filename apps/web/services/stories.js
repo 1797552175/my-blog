@@ -310,7 +310,8 @@ export async function createChapter(storyId, data) {
 }
 
 /**
- * 更新章节
+ * 更新章节（已发布章节会触发预压缩）
+ * @returns {{ chapter: StoryChapterResponse, warning: string|null }}
  */
 export async function updateChapter(storyId, chapterId, data) {
   return api.put(`/stories/${storyId}/chapters/${chapterId}`, data);
@@ -321,6 +322,20 @@ export async function updateChapter(storyId, chapterId, data) {
  */
 export async function deleteChapter(storyId, chapterId) {
   return api.del(`/stories/${storyId}/chapters/${chapterId}`);
+}
+
+/**
+ * 发布章节
+ */
+export async function publishChapter(storyId, chapterId) {
+  return api.post(`/stories/${storyId}/chapters/${chapterId}/publish`);
+}
+
+/**
+ * 取消发布章节
+ */
+export async function unpublishChapter(storyId, chapterId) {
+  return api.post(`/stories/${storyId}/chapters/${chapterId}/unpublish`);
 }
 
 // ========== 贡献者统计 ==========

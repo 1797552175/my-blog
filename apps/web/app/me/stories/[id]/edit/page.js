@@ -10,11 +10,15 @@ import {
   createChapter,
   updateChapter,
   deleteChapter,
+  publishChapter,
+  unpublishChapter,
 } from '../../../../../services/stories';
 import { isAuthed } from '../../../../../services/auth';
 import { useToast } from '../../../../../components/Toast';
 import AiWritingPanel from '../../../../../components/AiWritingPanel';
+import { streamAiWrite, WRITING_TYPE_FROM_SETTING, generateDirectionOptions } from '../../../../../services/aiWriting';
 import * as inspirationsService from '../../../../../services/inspirations';
+import { SparklesIcon } from '@heroicons/react/24/outline';
 
 export default function EditStoryPage() {
   const router = useRouter();
@@ -44,18 +48,50 @@ export default function EditStoryPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [editingChapterId, setEditingChapterId] = useState(null);
   const [editingChapterTitle, setEditingChapterTitle] = useState('');
+  const [isEditingMainTitle, setIsEditingMainTitle] = useState(false);
+  const [mainTitleInput, setMainTitleInput] = useState('');
+  const [chapterFilter, setChapterFilter] = useState('published'); // 'all', 'published', 'draft'
   const contentTextareaRef = useRef(null);
+  const [generatingBySetting, setGeneratingBySetting] = useState(false);
+  const bySettingAbortRef = useRef(null);
+  const bySettingAccumulatedRef = useRef('');
+  const originalTitleBeforeGenerateRef = useRef('');
+  const originalContentBeforeGenerateRef = useRef('');
+  const [showDirectionModal, setShowDirectionModal] = useState(false);
+  const [directionOptions, setDirectionOptions] = useState([]);
+  const [loadingDirectionOptions, setLoadingDirectionOptions] = useState(false);
+  /** 智能续写模式：有值表示「续写当前章」（前文到 sortOrder-1），无值表示「续写下一章」 */
+  const smartContinueNextChapterSortOrderRef = useRef(null);
   const [selectedChapterIds, setSelectedChapterIds] = useState([]);
   const [showBatchActions, setShowBatchActions] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [inspirations, setInspirations] = useState([]);
   const [loadingInspirations, setLoadingInspirations] = useState(false);
+  
+  // 跟踪原始章节内容，用于判断是否有变更
+  const [originalChapterTitle, setOriginalChapterTitle] = useState('');
+  const [originalChapterContent, setOriginalChapterContent] = useState('');
 
   useEffect(() => {
     setIsMounted(true);
     setIsAuthenticated(isAuthed());
   }, []);
+
+  // 页面离开前自动保存
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (selectedChapterId) {
+        // 使用同步请求确保保存完成
+        autoSaveChapter();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [selectedChapterId, chapterTitle, chapterContent, chapters]);
 
   // 格式化章节标题，确保以「第xxx章」开头
   const formatChapterTitle = (sortOrder, title) => {
@@ -87,22 +123,25 @@ export default function EditStoryPage() {
   const saveEditChapterTitle = async (chapter) => {
     try {
       const formattedTitle = formatChapterTitle(chapter.sortOrder, editingChapterTitle);
-      await updateChapter(id, chapter.id, {
+      const result = await updateChapter(id, chapter.id, {
         title: formattedTitle,
         contentMarkdown: chapter.contentMarkdown,
       });
+      if (result?.warning) {
+        addToast(result.warning);
+      }
       const chList = await listChapters(id);
       let updatedChapters = Array.isArray(chList) ? chList : [];
-      // 按照 sortOrder 升序排序
       updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       setChapters(updatedChapters);
-      // 如果当前选中的是编辑的章节，更新编辑区域的标题
       if (selectedChapterId === chapter.id) {
         setChapterTitle(formattedTitle);
       }
       setEditingChapterId(null);
       setEditingChapterTitle('');
-      addToast('章节标题已更新');
+      if (!result?.warning) {
+        addToast('章节标题已更新');
+      }
     } catch (err) {
       setError(err?.message ?? '保存失败');
     }
@@ -112,6 +151,118 @@ export default function EditStoryPage() {
   const cancelEditChapterTitle = () => {
     setEditingChapterId(null);
     setEditingChapterTitle('');
+  };
+
+  // 开始编辑主标题（内容区域上方的章节标题）
+  const startEditMainTitle = () => {
+    if (!selectedChapterId) return;
+    const currentChapter = chapters.find(ch => ch.id === selectedChapterId);
+    if (!currentChapter) return;
+    
+    // 提取标题中的内容部分（去掉「第xxx章」前缀）
+    const chapterPrefix = `第${currentChapter.sortOrder}章`;
+    let titleContent = currentChapter.title || '';
+    if (titleContent.startsWith(chapterPrefix)) {
+      titleContent = titleContent.substring(chapterPrefix.length).trim();
+    }
+    setMainTitleInput(titleContent);
+    setIsEditingMainTitle(true);
+  };
+
+  // 保存主标题编辑
+  const saveMainTitle = async () => {
+    if (!selectedChapterId) return;
+    const currentChapter = chapters.find(ch => ch.id === selectedChapterId);
+    if (!currentChapter) return;
+    
+    try {
+      const formattedTitle = formatChapterTitle(currentChapter.sortOrder, mainTitleInput);
+      const result = await updateChapter(id, currentChapter.id, {
+        title: formattedTitle,
+        contentMarkdown: currentChapter.contentMarkdown,
+      });
+      if (result?.warning) {
+        addToast(result.warning);
+      }
+      const chList = await listChapters(id);
+      let updatedChapters = Array.isArray(chList) ? chList : [];
+      updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setChapters(updatedChapters);
+      setChapterTitle(formattedTitle);
+      setIsEditingMainTitle(false);
+      setMainTitleInput('');
+      if (!result?.warning) {
+        addToast('章节标题已更新');
+      }
+    } catch (err) {
+      setError(err?.message ?? '保存失败');
+    }
+  };
+
+  // 取消主标题编辑
+  const cancelEditMainTitle = () => {
+    setIsEditingMainTitle(false);
+    setMainTitleInput('');
+  };
+
+  // 发布章节
+  const handlePublishChapter = async (chapterId) => {
+    try {
+      const storyId = parseInt(id);
+      
+      // 获取当前章节信息
+      const chapterToPublish = chapters.find(ch => ch.id === chapterId);
+      if (!chapterToPublish) {
+        throw new Error('章节不存在');
+      }
+      
+      // 计算已发布章节数量，确定新的 sortOrder
+      const publishedChapters = chapters.filter(ch => ch.published);
+      const newSortOrder = publishedChapters.length + 1;
+      
+      // 先更新章节标题（添加序号）和 sortOrder
+      const formattedTitle = formatChapterTitle(newSortOrder, chapterToPublish.title);
+      await updateChapter(storyId, chapterId, {
+        title: formattedTitle,
+        contentMarkdown: chapterToPublish.contentMarkdown,
+        sortOrder: newSortOrder,
+      });
+      
+      // 然后发布章节（会触发预压缩，失败时返回 warning）
+      const publishRes = await publishChapter(storyId, chapterId);
+      if (publishRes?.warning) {
+        addToast(publishRes.warning);
+      }
+
+      const chList = await listChapters(storyId);
+      let updatedChapters = Array.isArray(chList) ? chList : [];
+      updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setChapters(updatedChapters);
+
+      // 如果当前正在编辑这个章节，更新标题显示
+      if (selectedChapterId === chapterId) {
+        setChapterTitle(formattedTitle);
+      }
+
+      addToast('章节已发布');
+    } catch (err) {
+      setError(err?.message ?? '发布失败');
+    }
+  };
+
+  // 取消发布章节
+  const handleUnpublishChapter = async (chapterId) => {
+    try {
+      const storyId = parseInt(id);
+      await unpublishChapter(storyId, chapterId);
+      const chList = await listChapters(storyId);
+      let updatedChapters = Array.isArray(chList) ? chList : [];
+      updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setChapters(updatedChapters);
+      addToast('章节已取消发布');
+    } catch (err) {
+      setError(err?.message ?? '取消发布失败');
+    }
   };
 
   const load = useCallback(async () => {
@@ -168,12 +319,69 @@ export default function EditStoryPage() {
     load();
   }, [router, id, load, isAuthenticated, isMounted]);
 
+  // 自动保存当前章节（仅在内容有变更时触发）
+  const autoSaveChapter = async () => {
+    if (!selectedChapterId) return;
+    
+    // 检查内容是否有变更
+    const hasTitleChanged = chapterTitle !== originalChapterTitle;
+    const hasContentChanged = chapterContent !== originalChapterContent;
+    
+    if (!hasTitleChanged && !hasContentChanged) {
+      console.log('DEBUG: 章节内容无变更，跳过自动保存');
+      return;
+    }
+    
+    try {
+      const storyId = parseInt(id);
+      const currentChapter = chapters.find(ch => ch.id === selectedChapterId);
+      if (!currentChapter) return;
+      
+      const sortOrder = currentChapter?.sortOrder || 1;
+      // 草稿章节不添加序号前缀，已发布章节添加序号
+      const formattedTitle = currentChapter.published 
+        ? formatChapterTitle(sortOrder, chapterTitle)
+        : chapterTitle;
+      
+      await updateChapter(storyId, selectedChapterId, {
+        title: formattedTitle,
+        contentMarkdown: chapterContent,
+      });
+      
+      // 更新原始内容
+      setOriginalChapterTitle(formattedTitle);
+      setOriginalChapterContent(chapterContent);
+      
+      // 静默保存，不显示提示
+      const chList = await listChapters(storyId);
+      let updatedChapters = Array.isArray(chList) ? chList : [];
+      updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setChapters(updatedChapters);
+      
+      console.log('DEBUG: 自动保存成功，章节ID=', selectedChapterId);
+    } catch (err) {
+      console.error('自动保存失败:', err);
+    }
+  };
+
+  // 切换章节时自动保存
+  const handleSelectChapter = async (chapterId) => {
+    // 如果当前有选中的章节，先自动保存
+    if (selectedChapterId && selectedChapterId !== chapterId) {
+      await autoSaveChapter();
+    }
+    setSelectedChapterId(chapterId);
+  };
+
   useEffect(() => {
     if (chapters.length === 0) return;
     const ch = chapters.find((c) => c.id === selectedChapterId);
     if (ch) {
       setChapterTitle(ch.title ?? '');
       setChapterContent(ch.contentMarkdown ?? '');
+      // 更新原始内容
+      setOriginalChapterTitle(ch.title ?? '');
+      setOriginalChapterContent(ch.contentMarkdown ?? '');
     }
   }, [selectedChapterId, chapters]);
 
@@ -217,11 +425,63 @@ export default function EditStoryPage() {
       // 格式化章节标题
       const formattedTitle = formatChapterTitle(sortOrder, chapterTitle);
       
-      await updateChapter(storyId, selectedChapterId, {
+      console.log('DEBUG: calling updateChapter, storyId=', storyId, 'chapterId=', selectedChapterId);
+      const result = await updateChapter(storyId, selectedChapterId, {
         title: formattedTitle,
         contentMarkdown: chapterContent,
       });
-      addToast('章节已保存');
+      
+      // 详细打印结果，包含AI调试信息
+      console.group('DEBUG: updateChapter result');
+      console.log('章节信息:', result?.chapter);
+      console.log('警告信息:', result?.warning || '无');
+      if (result?.debugInfo) {
+        console.group('AI调试信息');
+        console.log('章节ID:', result.debugInfo.chapterId);
+        console.log('发布状态:', result.debugInfo.published);
+        console.log('内容长度:', result.debugInfo.contentLength);
+        if (result.debugInfo.aiLogs) {
+          console.group('AI调用日志');
+          
+          // 先显示基本信息
+          Object.entries(result.debugInfo.aiLogs).forEach(([key, value]) => {
+            if (!key.startsWith('AI-FullContext')) {
+              console.log(`${key}:`, value);
+            }
+          });
+          
+          // 显示完整上下文（支持分段）
+          if (result.debugInfo.aiLogs['AI-FullContext']) {
+            console.log('%c【AI完整上下文】', 'color: #0066cc; font-weight: bold;');
+            console.log(result.debugInfo.aiLogs['AI-FullContext']);
+          } else if (result.debugInfo.aiLogs['AI-FullContext-Segments']) {
+            // 分段显示
+            const segmentCount = parseInt(result.debugInfo.aiLogs['AI-FullContext-Segments']);
+            const totalLength = result.debugInfo.aiLogs['AI-FullContext-Length'];
+            console.log('%c【AI完整上下文】', 'color: #0066cc; font-weight: bold;');
+            console.log(`总长度: ${totalLength} 字符，共 ${segmentCount} 段`);
+            
+            for (let i = 1; i <= segmentCount; i++) {
+              const partKey = `AI-FullContext-Part${i}`;
+              if (result.debugInfo.aiLogs[partKey]) {
+                console.log(`--- 第 ${i}/${segmentCount} 段 ---`);
+                console.log(result.debugInfo.aiLogs[partKey]);
+              }
+            }
+          }
+          
+          console.groupEnd();
+        }
+        console.groupEnd();
+      }
+      console.groupEnd();
+      
+      if (result?.warning) {
+        addToast(result.warning);
+      } else {
+        addToast('章节已保存');
+      }
+      
       const chList = await listChapters(storyId);
       let updatedChapters = Array.isArray(chList) ? chList : [];
       // 按照 sortOrder 升序排序
@@ -241,14 +501,36 @@ export default function EditStoryPage() {
     setAddingChapter(true);
     try {
       const storyId = parseInt(id);
-      const newSortOrder = chapters.length + 1;
-      const newChapterTitle = `第${newSortOrder}章`;
       
-      const newCh = await createChapter(storyId, {
+      // 如果当前有选中的章节，先自动保存
+      if (selectedChapterId) {
+        await autoSaveChapter();
+      }
+      
+      let newSortOrder;
+      let newChapterTitle;
+      
+      // 根据当前筛选按钮决定添加逻辑
+      if (chapterFilter === 'published') {
+        // 当前在已发布选项，在已发布章节最后添加
+        const publishedChapters = chapters.filter(ch => ch.published);
+        newSortOrder = publishedChapters.length + 1;
+        newChapterTitle = `第${newSortOrder}章`;
+      } else {
+        // 当前在草稿选项，添加草稿
+        newSortOrder = chapters.length + 1;
+        newChapterTitle = '草稿';
+      }
+      
+      const requestData = {
         title: newChapterTitle,
         contentMarkdown: '',
         sortOrder: newSortOrder,
-      });
+        published: chapterFilter === 'published', // 已发布选项下直接发布
+      };
+      console.log('DEBUG Frontend: chapterFilter=', chapterFilter, 'requestData=', requestData);
+      const newCh = await createChapter(storyId, requestData);
+      console.log('DEBUG Frontend: created chapter=', newCh);
       const chList = await listChapters(storyId);
       let updatedChapters = Array.isArray(chList) ? chList : [];
       // 按照 sortOrder 升序排序
@@ -257,7 +539,7 @@ export default function EditStoryPage() {
       setSelectedChapterId(newCh.id);
       setChapterTitle(newCh.title ?? newChapterTitle);
       setChapterContent(newCh.contentMarkdown ?? '');
-      addToast('已添加章节');
+      addToast(chapterFilter === 'published' ? '已添加章节' : '已添加草稿');
     } catch (err) {
       setError(err?.message ?? '添加失败');
     } finally {
@@ -294,7 +576,7 @@ export default function EditStoryPage() {
           await updateChapter(storyId, chapter.id, {
             title: newTitle,
             contentMarkdown: chapter.contentMarkdown,
-          });
+          }).catch(() => {});
           // 更新本地章节数据
           chapter.title = newTitle;
         }
@@ -454,6 +736,203 @@ export default function EditStoryPage() {
     }
   }
 
+  // 智能续写：先弹窗选故事走向，再根据系统 prompt + 选项生成标题+正文
+  // nextChapterSortOrder：有值表示重写当前章（前文到该章前一章），无值表示续写下一章
+  async function openSmartContinueModal(nextChapterSortOrder = null) {
+    if (!id) return;
+    smartContinueNextChapterSortOrderRef.current = nextChapterSortOrder;
+    setShowDirectionModal(true);
+    setLoadingDirectionOptions(true);
+    setDirectionOptions([]);
+    setError(null);
+    try {
+      const contextUpTo = nextChapterSortOrder != null && nextChapterSortOrder > 0 ? nextChapterSortOrder - 1 : null;
+      const opts = await generateDirectionOptions(parseInt(id), contextUpTo);
+      setDirectionOptions(Array.isArray(opts) ? opts : []);
+    } catch (e) {
+      addToast(e?.message ?? '获取选项失败');
+      setDirectionOptions([]);
+    } finally {
+      setLoadingDirectionOptions(false);
+    }
+  }
+
+  // 智能续写下一章：同「添加章节」——先保存当前、若当前为草稿则发布，再新增一章（第N章、已发布），再打开选项弹窗
+  async function prepareAndOpenSmartContinueNext() {
+    if (!id) return;
+    const storyId = parseInt(id);
+    setError(null);
+    setAddingChapter(true);
+    try {
+      if (selectedChapterId) {
+        await autoSaveChapter();
+      }
+      let list = [...chapters];
+      const currentCh = selectedChapterId ? list.find(ch => ch.id === selectedChapterId) : null;
+      if (currentCh?.published === false) {
+        await publishChapter(storyId, currentCh.id);
+        const afterPublish = await listChapters(storyId);
+        list = Array.isArray(afterPublish) ? afterPublish : [];
+        list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        setChapters(list);
+      }
+      const publishedChapters = list.filter(ch => ch.published);
+      const newSortOrder = publishedChapters.length + 1;
+      const newChapterTitle = `第${newSortOrder}章`;
+      const newCh = await createChapter(storyId, {
+        title: newChapterTitle,
+        contentMarkdown: '',
+        sortOrder: newSortOrder,
+        published: true,
+      });
+      const chList = await listChapters(storyId);
+      let updatedChapters = Array.isArray(chList) ? chList : [];
+      updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      setChapters(updatedChapters);
+      setSelectedChapterId(newCh.id);
+      setChapterTitle(newCh.title ?? newChapterTitle);
+      setChapterContent(newCh.contentMarkdown ?? '');
+      setAddingChapter(false);
+      await openSmartContinueModal();
+    } catch (e) {
+      setAddingChapter(false);
+      addToast(e?.message ?? '操作失败');
+    }
+  }
+
+  async function handleWriteBySetting(selectedOption) {
+    if (!id || generatingBySetting) return;
+    setShowDirectionModal(false);
+    setError(null);
+    bySettingAccumulatedRef.current = '';
+    const nextChapterSortOrder = smartContinueNextChapterSortOrderRef.current ?? undefined;
+    let targetChapterId = selectedChapterId;
+    let targetSortOrder = 1;
+
+    try {
+      const storyId = parseInt(id);
+      // 重写当前章：写入已选中的已发布章节，不创建新章
+      if (nextChapterSortOrder != null && selectedChapterId) {
+        const cur = chapters.find(ch => ch.id === selectedChapterId);
+        if (cur) {
+          targetChapterId = cur.id;
+          targetSortOrder = cur.sortOrder ?? 1;
+        }
+      } else if (nextChapterSortOrder == null && selectedChapterId) {
+        // 续写下一章：章节已在 prepareAndOpenSmartContinueNext 中创建并选中
+        const cur = chapters.find(ch => ch.id === selectedChapterId);
+        targetChapterId = selectedChapterId;
+        targetSortOrder = cur?.sortOrder ?? 1;
+      } else if (chapters.length === 0) {
+        setAddingChapter(true);
+        const newCh = await createChapter(storyId, {
+          title: '草稿',
+          contentMarkdown: '',
+          sortOrder: 1,
+          published: false,
+        });
+        const chList = await listChapters(storyId);
+        let updatedChapters = Array.isArray(chList) ? chList : [];
+        updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        setChapters(updatedChapters);
+        setSelectedChapterId(newCh.id);
+        targetChapterId = newCh.id;
+        targetSortOrder = newCh.sortOrder ?? 1;
+        setAddingChapter(false);
+      } else {
+        setAddingChapter(true);
+        const newSortOrder = chapters.length + 1;
+        const newCh = await createChapter(storyId, {
+          title: '草稿',
+          contentMarkdown: '',
+          sortOrder: newSortOrder,
+          published: false,
+        });
+        const chList = await listChapters(storyId);
+        let updatedChapters = Array.isArray(chList) ? chList : [];
+        updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        setChapters(updatedChapters);
+        setSelectedChapterId(newCh.id);
+        targetChapterId = newCh.id;
+        targetSortOrder = newCh.sortOrder ?? newSortOrder;
+        setAddingChapter(false);
+      }
+
+      // 保存生成前的原始内容
+      originalTitleBeforeGenerateRef.current = chapterTitle;
+      originalContentBeforeGenerateRef.current = chapterContent;
+      
+      setChapterTitle('');
+      setChapterContent('');
+      setGeneratingBySetting(true);
+      bySettingAbortRef.current = new AbortController();
+
+      const streamParams = {
+        storyId,
+        type: WRITING_TYPE_FROM_SETTING,
+        wordCount: 1000,
+        selectedDirectionTitle: selectedOption?.title ?? null,
+        selectedDirectionDescription: selectedOption?.description ?? null,
+      };
+      if (nextChapterSortOrder != null) streamParams.nextChapterSortOrder = nextChapterSortOrder;
+
+      streamAiWrite(
+        streamParams,
+        (chunk) => {
+          const text = typeof chunk === 'string' ? chunk : (chunk?.content ?? String(chunk));
+          bySettingAccumulatedRef.current += text;
+          setChapterContent(prev => prev + text);
+        },
+        () => {
+          const full = bySettingAccumulatedRef.current.trim();
+          const blankIdx = full.indexOf('\n\n');
+          let parsedTitle = blankIdx >= 0 ? full.slice(0, blankIdx).trim().replace(/^\s*\n?/, '').split('\n')[0]?.trim() || '' : (full.split('\n')[0]?.trim() || '');
+          parsedTitle = parsedTitle.replace(/^#\s*/, '').replace(/^第[一二三四五六七八九十百千\d]+章\s*/, '').trim();
+          if (!parsedTitle) parsedTitle = '未命名';
+          const parsedBody = blankIdx >= 0 ? full.slice(blankIdx + 2).trim() : full.slice(full.indexOf('\n') >= 0 ? full.indexOf('\n') + 1 : 0).replace(/^\s*\n?/, '').trim();
+          const formattedTitle = formatChapterTitle(targetSortOrder, parsedTitle);
+          setChapterTitle(formattedTitle);
+          setChapterContent(parsedBody);
+          updateChapter(storyId, targetChapterId, {
+            title: formattedTitle,
+            contentMarkdown: parsedBody,
+          }).then(() => {
+            listChapters(storyId).then(chList => {
+              let updatedChapters = Array.isArray(chList) ? chList : [];
+              updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+              setChapters(updatedChapters);
+            });
+          }).catch(() => {});
+          setGeneratingBySetting(false);
+        },
+        (err) => {
+          setGeneratingBySetting(false);
+          if (err?.message !== '已取消') {
+            setError(err?.message ?? '生成失败');
+            addToast(err?.message ?? '生成失败');
+          }
+        },
+        bySettingAbortRef.current.signal
+      );
+    } catch (err) {
+      setGeneratingBySetting(false);
+      setError(err?.message ?? '生成失败');
+      addToast(err?.message ?? '生成失败');
+    }
+  }
+
+  function cancelWriteBySetting() {
+    if (bySettingAbortRef.current) {
+      bySettingAbortRef.current.abort();
+      bySettingAbortRef.current = null;
+    }
+    // 恢复生成前的原始内容
+    setChapterTitle(originalTitleBeforeGenerateRef.current);
+    setChapterContent(originalContentBeforeGenerateRef.current);
+    setGeneratingBySetting(false);
+    addToast('已取消生成，已恢复原文');
+  }
+
   if (loadStory) {
     return (
       <div className="max-w-3xl mx-auto p-6">
@@ -480,7 +959,130 @@ export default function EditStoryPage() {
             </div>
           )}
         </div>
-        <h1 className="text-2xl font-bold mb-4">{selectedChapterId ? chapterTitle : '编辑小说'}</h1>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          {isEditingMainTitle ? (
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <input
+                type="text"
+                value={mainTitleInput}
+                onChange={(e) => setMainTitleInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveMainTitle();
+                  if (e.key === 'Escape') cancelEditMainTitle();
+                }}
+                onBlur={saveMainTitle}
+                className="input w-96 text-xl font-bold py-1 px-3"
+                placeholder="输入章节标题"
+                autoFocus
+              />
+            </div>
+          ) : (
+            <h1
+              className="text-2xl font-bold min-w-0 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors group flex items-center gap-2"
+              onClick={startEditMainTitle}
+              title="点击编辑章节标题"
+            >
+              {selectedChapterId ? (
+                (() => {
+                  const currentCh = chapters.find(ch => ch.id === selectedChapterId);
+                  if (!currentCh) return chapterTitle;
+                  if (currentCh.published) return chapterTitle;
+                  const match = chapterTitle.match(/^第\d+章\s*(.*)$/);
+                  return match ? match[1] : chapterTitle;
+                })()
+              ) : '编辑小说'}
+              {selectedChapterId && (
+                <span className="text-sm text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                  ✏️
+                </span>
+              )}
+            </h1>
+          )}
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            {generatingBySetting ? (
+              <button
+                type="button"
+                className="btn btn-sm bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50"
+                onClick={cancelWriteBySetting}
+              >
+                取消生成
+              </button>
+            ) : (() => {
+              const publishedChapters = chapters.filter(ch => ch.published);
+              const nextChapterNumber = publishedChapters.length === 0 ? 1 : Math.max(0, ...publishedChapters.map(ch => ch.sortOrder ?? 0)) + 1;
+              const currentChapter = selectedChapterId ? chapters.find(ch => ch.id === selectedChapterId) : null;
+              const showRewriteCurrent = currentChapter?.published === true;
+              return (
+                <>
+                  {showRewriteCurrent && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-base font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm"
+                      onClick={() => openSmartContinueModal(currentChapter.sortOrder)}
+                    >
+                      <SparklesIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
+                      智能重写第{currentChapter.sortOrder}章
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-base font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors shadow-sm"
+                    onClick={prepareAndOpenSmartContinueNext}
+                  >
+                    <SparklesIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
+                    智能续写第{nextChapterNumber}章
+                  </button>
+                </>
+              );
+            })()}
+            <span
+              className="cursor-help text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 text-sm w-5 h-5 rounded-full border border-zinc-300 dark:border-zinc-600 flex items-center justify-center flex-shrink-0"
+              title="用设定写：仅根据本小说的标题、简介、风格、角色与术语设定生成内容，不依赖当前章节。与「AI 辅助写作」的区别是后者会结合前文与当前章续写。"
+            >
+              ?
+            </span>
+          </div>
+        </div>
+
+        {showDirectionModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDirectionModal(false)}>
+            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-lg w-full mx-4 p-6 border border-zinc-200 dark:border-zinc-700" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold mb-4">选择故事走向</h3>
+              {loadingDirectionOptions ? (
+                <p className="text-zinc-500 dark:text-zinc-400">加载中…</p>
+              ) : directionOptions.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-zinc-500 dark:text-zinc-400">暂无选项，可直接生成。</p>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn btn-primary" onClick={() => handleWriteBySetting(null)}>直接生成</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowDirectionModal(false)}>取消</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <ul className="space-y-3 mb-4">
+                    {directionOptions.map((opt, idx) => (
+                      <li key={idx}>
+                        <button
+                          type="button"
+                          className="w-full text-left p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                          onClick={() => handleWriteBySetting(opt)}
+                        >
+                          <span className="font-medium block mb-1">{opt.title}</span>
+                          {opt.description && <span className="text-sm text-zinc-500 dark:text-zinc-400">{opt.description}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn btn-ghost" onClick={openSmartContinueModal} disabled={loadingDirectionOptions}>换一换</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowDirectionModal(false)}>取消</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {error ? (
           <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
@@ -574,7 +1176,14 @@ export default function EditStoryPage() {
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button type="submit" className="btn bg-indigo-600 text-white" disabled={loading}>
-                    {loading ? '保存中…' : '存草稿'}
+                    {loading ? '保存中…' : (
+                      selectedChapterId ? (
+                        // 查找选中的章节
+                        chapters.find(ch => ch.id === selectedChapterId)?.published 
+                          ? '更新章节'
+                          : '存草稿'
+                      ) : '存草稿'
+                    )}
                   </button>
                 </div>
               </form>
@@ -721,11 +1330,35 @@ export default function EditStoryPage() {
                   onClick={onAddChapter}
                   disabled={addingChapter}
                 >
-                  {addingChapter ? '添加中…' : '+ 添加章节'}
+                  {addingChapter ? '添加中…' : (chapterFilter === 'published' ? '+ 添加章节' : '+ 添加草稿')}
                 </button>
 
-                <ul className="space-y-1 overflow-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
-                  {chapters.map((ch) => (
+                {/* 章节筛选选项 */}
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    className={`btn btn-xs ${chapterFilter === 'published' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setChapterFilter('published')}
+                  >
+                    已发布
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs ${chapterFilter === 'draft' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setChapterFilter('draft')}
+                  >
+                    草稿
+                  </button>
+                </div>
+
+                <ul className="space-y-1 overflow-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+                  {chapters
+                    .filter(ch => {
+                      if (chapterFilter === 'published') return ch.published;
+                      if (chapterFilter === 'draft') return !ch.published;
+                      return true;
+                    })
+                    .map((ch) => (
                     <li 
                       key={ch.id} 
                       className="relative w-full"
@@ -776,41 +1409,34 @@ export default function EditStoryPage() {
                         <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                           <button
                             type="button"
-                            onClick={() => setSelectedChapterId(ch.id)}
+                            onClick={() => handleSelectChapter(ch.id)}
                             className={`text-left flex-1 truncate text-sm ${selectedChapterId === ch.id
                               ? 'text-indigo-800 dark:text-indigo-200'
                               : 'text-zinc-700 dark:text-zinc-300'
                             }`}
                           >
-                            {ch.title || '未命名'}
+                            {/* 草稿章节不显示序号，只显示标题内容 */}
+                            {ch.published 
+                              ? (ch.title || '未命名')
+                              : (() => {
+                                  // 提取标题内容（去掉序号前缀）
+                                  const match = (ch.title || '').match(/^第\d+章\s*(.*)$/);
+                                  return match ? match[1] : (ch.title || '未命名');
+                                })()
+                            }
                           </button>
                           <div className="flex items-center gap-2 whitespace-nowrap">
-                            {!published && (
+                            {/* 发布/取消发布按钮 */}
+                            {!ch.published && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setPublished(true);
-                                  onSaveStoryMeta(new Event('submit'));
-                                }}
+                                onClick={() => handlePublishChapter(ch.id)}
                                 className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 rounded transition-colors"
-                                title="发布小说"
+                                title="发布章节"
                               >
                                 发布
                               </button>
                             )}
-                            {published && (
-                              <span className="text-xs px-2 py-1 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 rounded">
-                                已发布
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => startEditChapterTitle(ch)}
-                              className="p-1 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded text-sm transition-colors"
-                              title="编辑标题"
-                            >
-                              编辑
-                            </button>
                             <button
                               type="button"
                               onClick={() => onDeleteChapter(ch.id)}

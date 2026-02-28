@@ -6,6 +6,7 @@ public record UserMeResponse(
         String email,
         String personaPrompt,
         boolean personaEnabled,
-        String defaultAiModel
+        String defaultAiModel,
+        boolean admin
 ) {
 }

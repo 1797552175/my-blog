@@ -28,10 +28,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Collections;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -168,7 +171,7 @@ public class StoryServiceImpl implements StoryService {
         }
     }
 
-    @Cacheable(value = "stories", key = "#slug")
+    // @Cacheable(value = "stories", key = "#slug")
     private StoryResponse getBySlugWithCache(String slug) {
         Story story = storyRepository.findBySlugAndPublishedTrue(slug)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "小说不存在"));
@@ -177,7 +180,7 @@ public class StoryServiceImpl implements StoryService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "stories", key = "#id")
+    // @Cacheable(value = "stories", key = "#id")
     public StoryResponse getById(Long id) {
         Story story = storyRepository.findByIdAndPublishedTrue(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "小说不存在"));
@@ -186,7 +189,7 @@ public class StoryServiceImpl implements StoryService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "stories", key = "'author:' + #username + ':' + #id")
+    // @Cacheable(value = "stories", key = "'author:' + #username + ':' + #id")
     public StoryResponse getByIdForAuthor(String username, Long id) {
         Story story = storyRepository.findByIdAndAuthorUsername(id, username)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "小说不存在"));
@@ -262,8 +265,9 @@ public class StoryServiceImpl implements StoryService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "stories", key = "#id")
     public StoryResponse update(String username, Long id, StoryUpdateRequest request) {
+        log.info("Updating story: id={}, username={}, title={}", id, username, request.title());
+        
         Story story = storyRepository.findByIdAndAuthorUsername(id, username)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "小说不存在"));
 
@@ -272,14 +276,34 @@ public class StoryServiceImpl implements StoryService {
         // 更新AI创作相关字段
         story.setStyleParams(request.styleParams());
         story.setStorySummary(request.storySummary());
-        story.setIntentKeywords(request.intentKeywords());
+        
+        // 处理 intentKeywords 字段：清理空字符串，验证 JSON 格式
+        String intentKeywords = request.intentKeywords();
+        if (intentKeywords != null && intentKeywords.trim().isEmpty()) {
+            intentKeywords = null;
+        } else if (intentKeywords != null) {
+            // 验证 JSON 格式
+            try {
+                new ObjectMapper().readTree(intentKeywords);
+            } catch (Exception e) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "intentKeywords 必须是有效的 JSON 格式");
+            }
+        }
+        story.setIntentKeywords(intentKeywords);
 
         // 更新开源相关字段
         story.setOpenSource(request.openSource());
         story.setOpenSourceLicense(request.openSourceLicense());
 
         story.setPublished(request.published());
-        story.setTags(request.tags());
+        
+        // 处理 tags 字段，避免 null 值
+        List<String> tags = request.tags();
+        if (tags == null) {
+            tags = new ArrayList<>();
+        }
+        story.setTags(tags);
+        log.info("Setting tags: {}", tags);
 
         // 更新关联的灵感
         if (request.inspirationId() != null) {
@@ -290,8 +314,43 @@ public class StoryServiceImpl implements StoryService {
             story.setInspiration(null);
         }
 
+        log.info("Saving story to database...");
         Story saved = storyRepository.save(story);
-        return StoryResponse.fromEntity(saved);
+        log.info("Story saved successfully: id={}", saved.getId());
+        
+        try {
+            log.info("Creating StoryResponse...");
+            // 暂时返回简单响应，不使用 StoryResponse.fromEntity
+            StoryResponse response = new StoryResponse(
+                saved.getId(),
+                saved.getTitle(),
+                saved.getSlug(),
+                saved.isPublished(),
+                saved.hasContent(),
+                saved.isForkable(),
+                saved.getOpenSource() != null ? saved.getOpenSource() : false,
+                saved.getOpenSourceLicense(),
+                saved.getForkCount() != null ? saved.getForkCount() : 0,
+                saved.getStarCount() != null ? saved.getStarCount() : 0,
+                false,
+                saved.getStyleParams(),
+                saved.getStorySummary(),
+                saved.getIntentKeywords(),
+                null,
+                null,
+                saved.getInspiration() != null ? saved.getInspiration().getId() : null,
+                saved.getInspiration() != null ? saved.getInspiration().getTitle() : null,
+                saved.getTags() != null ? saved.getTags() : List.of(),
+                List.of(),
+                saved.getCreatedAt() != null ? saved.getCreatedAt().toString() : null,
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toString() : null
+            );
+            log.info("StoryResponse created successfully");
+            return response;
+        } catch (Exception e) {
+            log.error("Error creating StoryResponse", e);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "创建响应失败: " + e.getMessage());
+        }
     }
 
     @Override

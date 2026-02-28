@@ -34,11 +34,11 @@ public class LayeredPromptBuilderV2 {
         this.tokenBudgetManager = tokenBudgetManager;
     }
 
-    public String buildPrompt(StorySeed seed, List<StoryCommit> commits, StoryOption option) {
-        return buildPrompt(seed, commits, option, TokenBudgetManager.DEFAULT_TOTAL_BUDGET);
+    public String buildPrompt(StorySeed seed, com.example.api.story.Story story, List<StoryCommit> commits, StoryOption option) {
+        return buildPrompt(seed, story, commits, option, TokenBudgetManager.DEFAULT_TOTAL_BUDGET);
     }
 
-    public String buildPrompt(StorySeed seed, List<StoryCommit> commits, StoryOption option, int totalBudget) {
+    public String buildPrompt(StorySeed seed, com.example.api.story.Story story, List<StoryCommit> commits, StoryOption option, int totalBudget) {
         long startTime = System.currentTimeMillis();
 
         BudgetAllocation budget = tokenBudgetManager.allocateBudget(totalBudget, TokenBudgetManager.OUTPUT_RESERVE);
@@ -48,7 +48,7 @@ public class LayeredPromptBuilderV2 {
         String systemContext = buildSystemContext(seed);
         prompt.append(systemContext);
 
-        String worldbuildingLayer = buildWorldbuildingLayer(seed, commits, budget.getWorldbuildingBudget());
+        String worldbuildingLayer = buildWorldbuildingLayer(seed, story, commits, budget.getWorldbuildingBudget());
         prompt.append(worldbuildingLayer);
 
         String historyLayer = buildHistoryLayer(commits, budget.getHistoryBudget());
@@ -83,8 +83,8 @@ public class LayeredPromptBuilderV2 {
         return sb.toString();
     }
 
-    private String buildWorldbuildingLayer(StorySeed seed, List<StoryCommit> commits, int budget) {
-        SelectedWorldbuilding selected = worldbuildingSelector.selectRelevantWorldbuilding(seed, commits, budget);
+    private String buildWorldbuildingLayer(StorySeed seed, com.example.api.story.Story story, List<StoryCommit> commits, int budget) {
+        SelectedWorldbuilding selected = worldbuildingSelector.selectRelevantWorldbuilding(seed, story, commits, budget);
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n【世界观设定】\n");

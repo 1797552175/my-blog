@@ -34,13 +34,21 @@ public class User extends BaseEntity implements org.springframework.security.cor
     @Column(name = "default_ai_model", length = 64, nullable = true)
     private String defaultAiModel;
 
+    @Column(name = "admin", nullable = false)
+    private boolean admin = false;
+
     protected User() {
     }
 
     public User(String username, String email, String passwordHash) {
+        this(username, email, passwordHash, false);
+    }
+
+    public User(String username, String email, String passwordHash, boolean admin) {
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.admin = admin;
     }
 
     public String getEmail() {
@@ -116,6 +124,14 @@ public class User extends BaseEntity implements org.springframework.security.cor
 
     public void setDefaultAiModel(String defaultAiModel) {
         this.defaultAiModel = defaultAiModel;
+    }
+
+    public boolean isAdmin() {
+        return admin;
+    }
+
+    public void setAdmin(boolean admin) {
+        this.admin = admin;
     }
 
 }

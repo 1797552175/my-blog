@@ -32,6 +32,50 @@ async function request(path, options = {}) {
     const text = await res.text();
     const data = text ? safeJson(text) : null;
 
+    // 检查 AI 调试响应头并输出到控制台
+    if (!isServer) {
+      const aiDebugHeaders = {};
+      const aiFullContext = {};
+      
+      res.headers.forEach((value, key) => {
+        if (key.toLowerCase().startsWith('x-ai-debug-')) {
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('fullcontext')) {
+            // 提取完整上下文
+            const match = key.match(/x-ai-debug-log-(\d+)-(.+)/i);
+            if (match) {
+              aiFullContext[match[2]] = value;
+            }
+          } else {
+            aiDebugHeaders[key] = value;
+          }
+        }
+      });
+      
+      if (Object.keys(aiDebugHeaders).length > 0 || Object.keys(aiFullContext).length > 0) {
+        console.group('[AI Debug]', options.method || 'GET', path);
+        
+        // 显示基本信息
+        if (Object.keys(aiDebugHeaders).length > 0) {
+          console.log('调试信息:', aiDebugHeaders);
+        }
+        
+        // 显示完整上下文
+        if (Object.keys(aiFullContext).length > 0) {
+          console.group('AI 完整上下文');
+          Object.entries(aiFullContext).forEach(([key, value]) => {
+            console.log(`%c${key}`, 'color: #0066cc; font-weight: bold;');
+            console.log(value);
+          });
+          console.groupEnd();
+        }
+        
+        console.log('请求体:', options.body ? JSON.parse(options.body) : null);
+        console.log('响应数据:', data);
+        console.groupEnd();
+      }
+    }
+
     if (!res.ok) {
       const message = typeof data === 'object' && data?.error ? data.error : `http_${res.status}`;
       const error = new ApiError(message, data?.code ?? null, res.status, data?.fields ?? null);

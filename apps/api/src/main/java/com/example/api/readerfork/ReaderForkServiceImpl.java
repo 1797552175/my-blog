@@ -147,15 +147,29 @@ public class ReaderForkServiceImpl implements ReaderForkService {
         // 3. 查找或创建对应的 story_seed
         String openingForSeed = hasChapters ? buildOpeningFromChapters(story.getId(), null) : story.getStorySummary();
         final String opening = openingForSeed;
+        
+        // 先尝试通过 slug 查找，如果不存在则尝试通过 title 查找已存在的 seed
         StorySeed seed = storySeedRepository.findBySlug(storySlug)
                 .orElseGet(() -> {
-                    StorySeed newSeed = new StorySeed(
-                            story.getTitle(),
-                            story.getSlug(),
-                            opening,
-                            true,
-                            story.getAuthor()
-                    );
+                    // 尝试查找相同标题的 seed（可能是之前创建的）
+                    List<StorySeed> seedsByTitle = storySeedRepository.findByTitle(story.getTitle());
+                    if (!seedsByTitle.isEmpty()) {
+                        return seedsByTitle.get(0);
+                    }
+                    return null;
+                });
+        
+        // 如果还是没有找到，创建新的 seed
+        if (seed == null) {
+            // 确保 slug 唯一
+            String uniqueSlug = ensureUniqueSlugForStorySeed(story.getSlug());
+            StorySeed newSeed = new StorySeed(
+                    story.getTitle(),
+                    uniqueSlug,
+                    opening,
+                    true,
+                    story.getAuthor()
+            );
                     newSeed.setStyleParams(story.getStyleParams());
                     newSeed.setLicenseType(story.getOpenSourceLicense());
                     newSeed.setStorySummary(story.getStorySummary());
@@ -197,8 +211,8 @@ public class ReaderForkServiceImpl implements ReaderForkService {
                         storyOptionRepository.save(option2);
                     }
                     
-                    return newSeed;
-                });
+            seed = newSeed;
+        }
 
         // 4. 检查是否已有 fork（同读者同 seed 只保留一个，不按 fromChapterSortOrder 区分）
         Optional<ReaderFork> existing = readerForkRepository.findByStorySeed_IdAndReader_Id(seed.getId(), reader.getId());
@@ -206,8 +220,9 @@ public class ReaderForkServiceImpl implements ReaderForkService {
             return toForkResponse(existing.get());
         }
 
-        // 5. 创建新的 fork
+        // 5. 创建新的 fork，同时关联 Story 和 StorySeed
         ReaderFork fork = new ReaderFork(seed, reader);
+        fork.setStory(story);  // 关联 Story，用于 AI 续写功能
         fork.setTitle(seed.getTitle());
         fork.setFromChapterSortOrder(fromChapterSortOrder);
         ReaderFork saved = readerForkRepository.save(fork);
@@ -294,7 +309,7 @@ public class ReaderForkServiceImpl implements ReaderForkService {
 
         // 使用混合RAG模式构建Prompt
         HybridPromptResult promptResult = hybridRAGPromptBuilder.buildPrompt(
-                fork.getStorySeed(), commits, option, forkId);
+                fork.getStorySeed(), fork.getStory(), commits, option, forkId);
         String generated = aiChatService.chat(List.of(), promptResult.prompt(), STORY_GENERATE_SYSTEM);
         if (generated == null || generated.isBlank()) {
             generated = "*（生成内容为空，请重试或检查 AI 配置）*";
@@ -369,7 +384,7 @@ public class ReaderForkServiceImpl implements ReaderForkService {
         }
 
         HybridPromptResult promptResult = hybridRAGPromptBuilder.buildPrompt(
-                fork.getStorySeed(), commits, option, forkId);
+                fork.getStorySeed(), fork.getStory(), commits, option, forkId);
 
         StringBuilder generatedContent = new StringBuilder();
 
@@ -475,11 +490,25 @@ public class ReaderForkServiceImpl implements ReaderForkService {
             storySlug = fork.getStory().getSlug();
         }
         
+        // 获取 storyId：优先使用 fork.getStory()，如果没有则尝试通过 title 查找
+        Long storyId = null;
+        if (fork.getStory() != null) {
+            storyId = fork.getStory().getId();
+        } else if (fork.getStorySeed() != null) {
+            // 尝试通过 title 查找对应的 Story（Story 和 StorySeed 的 title 应该相同）
+            String seedTitle = fork.getStorySeed().getTitle();
+            List<Story> storiesByTitle = storyRepository.findByTitle(seedTitle);
+            if (!storiesByTitle.isEmpty()) {
+                storyId = storiesByTitle.get(0).getId();
+            }
+        }
+        
         return new ReaderForkResponse(
                 fork.getId(),
                 fork.getStorySeed() != null ? fork.getStorySeed().getId() : null,
                 fork.getStorySeed() != null ? fork.getStorySeed().getTitle() : (fork.getStory() != null ? fork.getStory().getTitle() : null),
                 storySlug,
+                storyId,
                 fork.getFromChapterSortOrder(),
                 fork.getLastReadCommitId(),
                 fork.getReader().getId(),
@@ -487,6 +516,25 @@ public class ReaderForkServiceImpl implements ReaderForkService {
                 fork.getTitle(),
                 fork.getCreatedAt(),
                 fork.getUpdatedAt());
+    }
+
+    /**
+     * 确保 StorySeed 的 slug 唯一
+     */
+    private String ensureUniqueSlugForStorySeed(String baseSlug) {
+        if (baseSlug == null || baseSlug.isBlank()) {
+            baseSlug = "story";
+        }
+        String slug = baseSlug;
+        int counter = 1;
+        while (storySeedRepository.findBySlug(slug).isPresent()) {
+            String suffix = "-" + counter;
+            int maxBaseLength = 220 - suffix.length();
+            String base = baseSlug.length() > maxBaseLength ? baseSlug.substring(0, maxBaseLength) : baseSlug;
+            slug = base + suffix;
+            counter++;
+        }
+        return slug;
     }
 
     private StoryCommitResponse toCommitResponse(StoryCommit c) {

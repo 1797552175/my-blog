@@ -63,7 +63,7 @@ export default function ManageStoryPage({ params }) {
         openSource,
         openSourceLicense,
         published,
-        intentKeywords
+        intentKeywords: intentKeywords.trim() || null
       });
       
       addToast('小说信息更新成功', 'success');

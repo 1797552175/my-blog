@@ -80,7 +80,8 @@ public class AuthController {
                 user.getEmail(),
                 user.getPersonaPrompt(),
                 user.isPersonaEnabled(),
-                user.getDefaultAiModel());
+                user.getDefaultAiModel(),
+                user.isAdmin());
     }
 
     @PutMapping("/me")
@@ -115,7 +116,8 @@ public class AuthController {
                 user.getEmail(),
                 user.getPersonaPrompt(),
                 user.isPersonaEnabled(),
-                user.getDefaultAiModel());
+                user.getDefaultAiModel(),
+                user.isAdmin());
     }
 
     @PutMapping("/me/password")

@@ -2,6 +2,8 @@ package com.example.api.story;
 
 import com.example.api.story.dto.AiWritingRequest;
 import com.example.api.story.dto.AiWritingResponse;
+import com.example.api.story.dto.GenerateDirectionOptionsRequest;
+import com.example.api.story.dto.GenerateDirectionOptionsResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -23,11 +25,28 @@ import java.io.IOException;
 public class AiWritingController {
 
     private final AiWritingService aiWritingService;
+    private final DirectionOptionsService directionOptionsService;
     private final ObjectMapper objectMapper;
 
-    public AiWritingController(AiWritingService aiWritingService, ObjectMapper objectMapper) {
+    public AiWritingController(AiWritingService aiWritingService,
+                               DirectionOptionsService directionOptionsService,
+                               ObjectMapper objectMapper) {
         this.aiWritingService = aiWritingService;
+        this.directionOptionsService = directionOptionsService;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 生成 3 个故事走向选项（基于预压缩前文，无章节时仅用设定）
+     */
+    @PostMapping("/generate-direction-options")
+    public GenerateDirectionOptionsResponse generateDirectionOptions(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody GenerateDirectionOptionsRequest request) {
+        if (userDetails == null) {
+            throw new com.example.api.common.ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+        return directionOptionsService.generateOptions(request);
     }
 
     /**

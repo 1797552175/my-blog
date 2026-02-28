@@ -31,6 +31,11 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     Optional<Story> findBySlug(String slug);
 
     /**
+     * 根据标题查找小说
+     */
+    List<Story> findByTitle(String title);
+
+    /**
      * 列出所有已发布的小说（预取 author 和 tags 避免列表序列化时懒加载异常）
      */
     @EntityGraph(attributePaths = {"author", "tags"})

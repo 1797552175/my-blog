@@ -1,5 +1,6 @@
 package com.example.api.story;
 
+import com.example.api.story.dto.PublishChapterResponse;
 import com.example.api.story.dto.StoryChapterCreateRequest;
 import com.example.api.story.dto.StoryChapterResponse;
 import com.example.api.story.dto.StoryChapterUpdateRequest;
@@ -77,10 +78,10 @@ public class StoryChapterController {
     }
 
     /**
-     * 更新章节
+     * 更新章节（已发布章节会触发预压缩）
      */
     @PutMapping("/{storyId}/chapters/{chapterId}")
-    public StoryChapterResponse updateChapter(
+    public PublishChapterResponse updateChapter(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long storyId,
             @PathVariable Long chapterId,
@@ -98,5 +99,27 @@ public class StoryChapterController {
             @PathVariable Long storyId,
             @PathVariable Long chapterId) {
         chapterService.deleteChapter(userDetails.getUsername(), storyId, chapterId);
+    }
+
+    /**
+     * 发布章节（会触发预压缩；失败时 response.warning 有提示）
+     */
+    @PostMapping("/{storyId}/chapters/{chapterId}/publish")
+    public PublishChapterResponse publishChapter(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long storyId,
+            @PathVariable Long chapterId) {
+        return chapterService.publishChapter(userDetails.getUsername(), storyId, chapterId);
+    }
+
+    /**
+     * 取消发布章节
+     */
+    @PostMapping("/{storyId}/chapters/{chapterId}/unpublish")
+    public StoryChapterResponse unpublishChapter(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long storyId,
+            @PathVariable Long chapterId) {
+        return chapterService.unpublishChapter(userDetails.getUsername(), storyId, chapterId);
     }
 }
