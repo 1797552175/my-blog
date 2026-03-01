@@ -109,12 +109,67 @@ export function streamChat(messages, content, onChunk, onComplete, onError) {
 }
 
 /**
+ * 首页：根据用户输入生成小说方案选项（或引导文案）
+ * @param {string} message 本轮用户输入
+ * @param {Array<{ role: string, content: string }>} [history] 对话历史
+ * @returns {Promise<{ guidanceText: string, options: Array<NovelOptionItem> | null }>}
+ */
+export async function generateNovelOptions(message, history) {
+  return api.post('/ai/novel-options', { message: message || '', history: history || [] });
+}
+
+/**
+ * 首页：流式生成小说方案（与编辑页智能生成同款流式），流式内容由 onChunk 推送，onComplete 时已推送完毕，可由调用方累积后解析 JSON。
+ * @param {string} message 本轮用户输入
+ * @param {Array<{ role: string, content: string }>} [history] 对话历史
+ * @param {function(string)} onChunk 每段流式文本
+ * @param {function()} onComplete 流结束
+ * @param {function(Error)} onError 错误
+ */
+export function streamNovelOptions(message, history, onChunk, onComplete, onError) {
+  if (typeof window === 'undefined') {
+    onError && onError(new Error('Cannot use streamNovelOptions on server'));
+    return;
+  }
+  const url = (process.env.NEXT_PUBLIC_API_BASE || '/api') + '/ai/novel-options/stream';
+  const token = localStorage.getItem('token') || '';
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({ message: message || '', history: history || [] })
+  })
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      parseSSEStream(reader, decoder, onChunk, onComplete, onError);
+    })
+    .catch(err => onError && onError(err));
+}
+
+/**
  * 将当前对话保存到灵感库
  * @param {string} [title] 可选标题
  * @param {Array<{ role: string, content: string }>} messages 对话消息列表
  */
 export async function addInspiration(title, messages) {
   return api.post('/inspirations', { title: title || null, messages: messages || [] });
+}
+
+/**
+ * 将一个小说方案选项保存为灵感（用于快速创作预填）
+ * @param {Object} option 结构化选项 { title, storySummary, tags, styleId, customStyle, toneId, viewpointId, aiPrompt }
+ */
+export async function saveOptionAsInspiration(option) {
+  const optionSnapshot = JSON.stringify(option || {});
+  return api.post('/inspirations', {
+    title: option?.title || null,
+    messages: [],
+    optionSnapshot
+  });
 }
 
 const PERSONA_SESSION_KEY = 'persona_session_id';

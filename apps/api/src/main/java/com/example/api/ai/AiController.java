@@ -25,6 +25,8 @@ import com.example.api.ai.dto.GenerateOptionsRequest;
 import com.example.api.ai.dto.GenerateOptionsResponse;
 import com.example.api.ai.dto.GenerateChapterRequest;
 import com.example.api.ai.dto.GenerateChapterResponse;
+import com.example.api.ai.dto.NovelOptionsRequest;
+import com.example.api.ai.dto.NovelOptionsResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.api.common.ApiException;
@@ -58,6 +60,7 @@ public class AiController {
     private String defaultAiModel;
 
     private final AiChatService aiChatService;
+    private final NovelOptionsService novelOptionsService;
     private final PersonaChatCache personaChatCache;
     private final UserRepository userRepository;
     private final UserPersonaProfileRepository personaProfileRepository;
@@ -66,12 +69,14 @@ public class AiController {
 
     public AiController(
             AiChatService aiChatService,
+            NovelOptionsService novelOptionsService,
             PersonaChatCache personaChatCache,
             UserRepository userRepository,
             UserPersonaProfileRepository personaProfileRepository,
             StoryRepository storyRepository,
             ObjectMapper objectMapper) {
         this.aiChatService = aiChatService;
+        this.novelOptionsService = novelOptionsService;
         this.personaChatCache = personaChatCache;
         this.userRepository = userRepository;
         this.personaProfileRepository = personaProfileRepository;
@@ -163,6 +168,61 @@ public class AiController {
         String userContent = request.content() != null ? request.content() : "";
         String content = aiChatService.chat(history, userContent, systemPrompt);
         return new ChatResponse(content);
+    }
+
+    /**
+     * 首页：根据用户输入生成小说方案选项（或引导文案）。需 JWT。
+     */
+    @PostMapping("/novel-options")
+    public NovelOptionsResponse novelOptions(@Valid @RequestBody NovelOptionsRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (username == null || username.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+        return novelOptionsService.generate(request);
+    }
+
+    /**
+     * 首页：根据用户输入流式生成小说方案（与编辑页智能生成同款流式）。需 JWT。
+     */
+    @PostMapping(value = "/novel-options/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public void novelOptionsStream(@Valid @RequestBody NovelOptionsRequest request, HttpServletResponse response) throws IOException {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (username == null || username.isBlank()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "请先登录");
+        }
+        String model = defaultAiModel != null && !defaultAiModel.isBlank() ? defaultAiModel : "gpt-4o-mini";
+        response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        try {
+            novelOptionsService.stream(request, model, new AiChatService.StreamChatCallback() {
+                @Override
+                public void onChunk(String chunk) {
+                    try {
+                        writeSSEChunk(response, chunk);
+                    } catch (IOException e) {
+                        // 客户端断开
+                    }
+                }
+
+                @Override
+                public void onComplete() {
+                    safeWriteDoneOrError(response, "data: [DONE]");
+                }
+
+                @Override
+                public void onError(Throwable throwable) {
+                    if (throwable != null) {
+                        logger.warn("Novel options stream error: {}", throwable.getMessage(), throwable);
+                    }
+                    safeWriteDoneOrError(response, "data: [ERROR]");
+                }
+            });
+        } catch (IOException e) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "AI 服务暂时不可用");
+        }
     }
 
     /**

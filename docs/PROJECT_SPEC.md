@@ -75,6 +75,11 @@
 | Pull Request | GET  | /api/story-seeds/{id}/pull-requests | 是   | 作者查看该故事的 PR 列表 |
 | Pull Request | GET  | /api/story-pull-requests/{prId} | 是   | 作者/读者查看 PR 详情 |
 | Pull Request | PATCH | /api/story-pull-requests/{prId} | 是   | 作者改 PR 状态（merged/closed） |
+| AI 小说选项 | POST  | /api/ai/novel-options           | 是   | 首页根据用户输入生成小说方案选项（或引导文案） |
+| 灵感        | POST  | /api/inspirations               | 是   | 创建灵感（支持 title、messages、optionSnapshot 快照） |
+| 灵感        | GET   | /api/inspirations               | 是   | 当前用户灵感分页列表 |
+| 灵感        | GET   | /api/inspirations/{id}         | 是   | 灵感详情（含 optionSnapshot，用于快速创作预填） |
+| 灵感        | DELETE| /api/inspirations/{id}         | 是   | 删除灵感 |
 
 认证方式：除上述公开接口外，其余请求需在 Header 中携带 `Authorization: Bearer <token>`。
 
@@ -83,7 +88,7 @@
 - **User**：用户名、邮箱、密码（加密存储）
 - **Post**：标题、slug、正文（Markdown）、是否发布、标签（tags）、作者、灵感（inspiration，可选）、创建/更新时间
 - **Comment**：文章、用户（可选）、游客昵称/邮箱/网址、内容、创建时间
-- **Inspiration**：用户、标题、对话消息；与 Post 可选关联（小说可记录来源灵感）
+- **Inspiration**：用户、标题、对话消息、optionSnapshot（小说方案快照，可选）；与 Post 可选关联（小说可记录来源灵感）
 - **StorySeed**：故事种子（主线），作者、标题、slug、开头正文（openingMarkdown）、风格参数（styleParams）、许可（licenseType）、是否发布、创建/更新时间
 
 接口请求/响应字段详见 [API 文档](API.md)。
@@ -168,6 +173,7 @@
 | updated_at | TIMESTAMP | 非空 | 更新时间 |
 | user_id | BIGINT | 非空、外键 | 所属用户 ID |
 | title | VARCHAR(200) | 可空 | 灵感标题 |
+| option_snapshot | JSON | 可空 | 小说方案快照（书名、简介、风格等），用于快速创作预填 |
 
 **索引**：user_id。**外键**：user_id → users(id)。
 

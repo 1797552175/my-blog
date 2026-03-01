@@ -29,8 +29,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.Collections;
 
@@ -149,11 +151,17 @@ public class StoryServiceImpl implements StoryService {
     private Page<StoryListItemResponse> mapToListItemWithHasContent(Page<Story> result) {
         List<Story> content = result.getContent();
         if (content.isEmpty()) {
-            return result.map(s -> StoryListItemResponse.fromEntity(s, false));
+            return result.map(s -> StoryListItemResponse.fromEntity(s, false, 0));
         }
         List<Long> ids = content.stream().map(Story::getId).toList();
         Set<Long> withChapters = findStoryIdsWithChaptersSafe(ids);
-        return result.map(s -> StoryListItemResponse.fromEntity(s, withChapters.contains(s.getId())));
+        // 批量查询章节数
+        Map<Long, Integer> chapterCounts = new HashMap<>();
+        for (Long id : ids) {
+            chapterCounts.put(id, storyChapterRepository.countByStoryId(id));
+        }
+        return result.map(s -> StoryListItemResponse.fromEntity(s, withChapters.contains(s.getId()),
+                chapterCounts.getOrDefault(s.getId(), 0)));
     }
 
     @Override

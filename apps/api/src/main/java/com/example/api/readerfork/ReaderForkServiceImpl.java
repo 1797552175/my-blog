@@ -214,10 +214,17 @@ public class ReaderForkServiceImpl implements ReaderForkService {
             seed = newSeed;
         }
 
-        // 4. 检查是否已有 fork（同读者同 seed 只保留一个，不按 fromChapterSortOrder 区分）
-        Optional<ReaderFork> existing = readerForkRepository.findByStorySeed_IdAndReader_Id(seed.getId(), reader.getId());
-        if (existing.isPresent()) {
-            return toForkResponse(existing.get());
+        // 4. 检查是否已有 fork
+        // 先按 story_id 查询（唯一约束在 story_id 上）
+        Optional<ReaderFork> existingByStory = readerForkRepository.findByStory_IdAndReader_Id(story.getId(), reader.getId());
+        if (existingByStory.isPresent()) {
+            return toForkResponse(existingByStory.get());
+        }
+        
+        // 再按 story_seed_id 查询（兼容旧数据）
+        Optional<ReaderFork> existingBySeed = readerForkRepository.findByStorySeed_IdAndReader_Id(seed.getId(), reader.getId());
+        if (existingBySeed.isPresent()) {
+            return toForkResponse(existingBySeed.get());
         }
 
         // 5. 创建新的 fork，同时关联 Story 和 StorySeed

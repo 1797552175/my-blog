@@ -16,6 +16,8 @@ import com.example.api.inspiration.dto.InspirationMessageResponse;
 import com.example.api.inspiration.dto.InspirationResponse;
 import com.example.api.user.User;
 import com.example.api.user.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class InspirationServiceImpl implements InspirationService {
@@ -23,14 +25,17 @@ public class InspirationServiceImpl implements InspirationService {
     private final InspirationRepository inspirationRepository;
     private final InspirationMessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     public InspirationServiceImpl(
             InspirationRepository inspirationRepository,
             InspirationMessageRepository messageRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            ObjectMapper objectMapper) {
         this.inspirationRepository = inspirationRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -40,9 +45,23 @@ public class InspirationServiceImpl implements InspirationService {
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "请先登录"));
 
         List<InspirationCreateRequest.MessageItem> items = request.messages() != null ? request.messages() : List.of();
+        String optionSnapshot = request.optionSnapshot() != null && !request.optionSnapshot().isBlank()
+                ? request.optionSnapshot().trim()
+                : null;
+
         String title = request.title() != null && !request.title().isBlank()
                 ? request.title().trim()
                 : null;
+        if (title == null && optionSnapshot != null) {
+            try {
+                JsonNode root = objectMapper.readTree(optionSnapshot);
+                if (root.has("title") && root.get("title").isTextual()) {
+                    String t = root.get("title").asText();
+                    title = t.length() > 200 ? t.substring(0, 200) : t;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         if (title == null && !items.isEmpty()) {
             String firstUser = items.stream()
                     .filter(m -> "user".equalsIgnoreCase(m.role()))
@@ -54,7 +73,9 @@ public class InspirationServiceImpl implements InspirationService {
                 title = trimmed.length() > 50 ? trimmed.substring(0, 50) : trimmed;
             }
         }
+
         Inspiration inspiration = new Inspiration(user, title);
+        inspiration.setOptionSnapshot(optionSnapshot);
         Inspiration saved = inspirationRepository.save(inspiration);
 
         for (int i = 0; i < items.size(); i++) {
@@ -101,7 +122,8 @@ public class InspirationServiceImpl implements InspirationService {
                 inspiration.getId(),
                 inspiration.getTitle(),
                 inspiration.getCreatedAt(),
-                messageResponses);
+                messageResponses,
+                inspiration.getOptionSnapshot());
     }
 
     @Override

@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
-import { listMyStories, deleteStory, getMyTags } from '../../../services/stories';
+import { listMyStories, deleteStory, getMyTags, updateStory } from '../../../services/stories';
 import { isAuthed } from '../../../services/auth';
 import { LoadingList } from '../../../lib/loading';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 
 export default function MyStoriesPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function MyStoriesPage() {
   const [selectedTag, setSelectedTag] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   useEffect(() => {
     setIsMounted(true);
@@ -70,13 +72,59 @@ export default function MyStoriesPage() {
   }, [load, isAuthenticated, isMounted]);
 
   async function onDelete(id, title) {
-    if (!confirm(`确定要删除「${title}」吗？`)) return;
-    try {
-      await deleteStory(id);
-      await load();
-    } catch (err) {
-      setError(err?.message ?? '删除失败');
-    }
+    setConfirmDialog({
+      open: true,
+      title: '删除小说',
+      message: `确定要删除「${title}」吗？此操作不可恢复，小说内容将被永久删除。`,
+      confirmText: '确认删除',
+      onConfirm: async () => {
+        try {
+          await deleteStory(id);
+          await load();
+          setConfirmDialog({ open: false, title: '', message: '', onConfirm: null });
+        } catch (err) {
+          setError(err?.message ?? '删除失败');
+        }
+      }
+    });
+  }
+
+  async function onTogglePublish(id, title, currentPublished) {
+    const action = currentPublished ? '取消发布' : '发布';
+    const message = currentPublished 
+      ? `确定要取消发布「${title}」吗？取消后，小说将不再显示在小说库中。`
+      : `确定要发布「${title}」吗？发布后，小说将显示在小说库中供其他用户阅读。`;
+    
+    setConfirmDialog({
+      open: true,
+      title: `${action}小说`,
+      message: message,
+      confirmText: currentPublished ? '取消发布' : '确认发布',
+      onConfirm: async () => {
+        try {
+          const story = stories.find(s => s.id === id);
+          if (!story) {
+            throw new Error('小说不存在');
+          }
+          
+          await updateStory(id, {
+            title: story.title,
+            storySummary: story.storySummary,
+            styleParams: story.styleParams,
+            intentKeywords: story.intentKeywords,
+            openSource: story.openSource,
+            openSourceLicense: story.openSourceLicense,
+            published: !currentPublished,
+            tags: story.tags,
+            inspirationId: story.inspirationId
+          });
+          await load();
+          setConfirmDialog({ open: false, title: '', message: '', onConfirm: null });
+        } catch (err) {
+          setError(err?.message ?? `${action}失败`);
+        }
+      }
+    });
   }
 
   const getPageTitle = () => {
@@ -212,7 +260,13 @@ export default function MyStoriesPage() {
                     </>
                   )}
                   <Link href={`/me/stories/${story.id}/edit`} className="btn btn-sm btn-ghost">编辑</Link>
-                  <Link href={`/stories/${story.slug}`} className="btn btn-sm btn-ghost">预览</Link>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${story.published ? 'btn-ghost text-amber-600 dark:text-amber-400' : 'btn-primary'}`}
+                    onClick={() => onTogglePublish(story.id, story.title, story.published)}
+                  >
+                    {story.published ? '取消发布' : '发布'}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-sm btn-ghost text-red-600 dark:text-red-400"
@@ -226,6 +280,15 @@ export default function MyStoriesPage() {
           )}
         </div>
       </div>
+      
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: null })}
+      />
     </div>
   );
 }

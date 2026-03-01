@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams, usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
@@ -23,6 +23,8 @@ import { SparklesIcon } from '@heroicons/react/24/outline';
 export default function EditStoryPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const id = params?.id;
   const { addToast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
@@ -62,16 +64,21 @@ export default function EditStoryPage() {
   const [loadingDirectionOptions, setLoadingDirectionOptions] = useState(false);
   /** 智能续写模式：有值表示「续写当前章」（前文到 sortOrder-1），无值表示「续写下一章」 */
   const smartContinueNextChapterSortOrderRef = useRef(null);
+  const autoGenerateFirstChapterDoneRef = useRef(false);
   const [selectedChapterIds, setSelectedChapterIds] = useState([]);
   const [showBatchActions, setShowBatchActions] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [inspirations, setInspirations] = useState([]);
   const [loadingInspirations, setLoadingInspirations] = useState(false);
-  
+
   // 跟踪原始章节内容，用于判断是否有变更
   const [originalChapterTitle, setOriginalChapterTitle] = useState('');
   const [originalChapterContent, setOriginalChapterContent] = useState('');
+
+  // 删除章节弹窗状态
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingChapterId, setDeletingChapterId] = useState(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -547,17 +554,27 @@ export default function EditStoryPage() {
     }
   }
 
-  async function onDeleteChapter(chapterId) {
-    if (!confirm('确定删除该章节？')) return;
+  function openDeleteModal(chapterId) {
+    setDeletingChapterId(chapterId);
+    setShowDeleteModal(true);
+  }
+
+  function closeDeleteModal() {
+    setShowDeleteModal(false);
+    setDeletingChapterId(null);
+  }
+
+  async function confirmDeleteChapter() {
+    if (!deletingChapterId) return;
     setError(null);
     try {
       const storyId = parseInt(id);
-      await deleteChapter(storyId, chapterId);
+      await deleteChapter(storyId, deletingChapterId);
       const chList = await listChapters(storyId);
       let updatedChapters = Array.isArray(chList) ? chList : [];
       // 按照 sortOrder 升序排序
       updatedChapters.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      
+
       // 更新章节标题，确保序号正确
       for (let i = 0; i < updatedChapters.length; i++) {
         const chapter = updatedChapters[i];
@@ -581,9 +598,9 @@ export default function EditStoryPage() {
           chapter.title = newTitle;
         }
       }
-      
+
       setChapters(updatedChapters);
-      if (selectedChapterId === chapterId) {
+      if (selectedChapterId === deletingChapterId) {
         const next = updatedChapters[0];
         setSelectedChapterId(next?.id ?? null);
         setChapterTitle(next?.title ?? '');
@@ -592,6 +609,8 @@ export default function EditStoryPage() {
       addToast('已删除');
     } catch (err) {
       setError(err?.message ?? '删除失败');
+    } finally {
+      closeDeleteModal();
     }
   }
 
@@ -932,6 +951,16 @@ export default function EditStoryPage() {
     setGeneratingBySetting(false);
     addToast('已取消生成，已恢复原文');
   }
+
+  // 快速创作跳转带 autoGenerateFirstChapter=1 时，加载完成后自动触发生成第一章
+  useEffect(() => {
+    if (loadStory || !id || !story || chapters.length > 0) return;
+    if (searchParams.get('autoGenerateFirstChapter') !== '1') return;
+    if (autoGenerateFirstChapterDoneRef.current) return;
+    autoGenerateFirstChapterDoneRef.current = true;
+    router.replace(pathname || `/me/stories/${id}/edit`, { scroll: false });
+    handleWriteBySetting(null);
+  }, [loadStory, id, story, chapters.length, searchParams, pathname, router]);
 
   if (loadStory) {
     return (
@@ -1439,7 +1468,7 @@ export default function EditStoryPage() {
                             )}
                             <button
                               type="button"
-                              onClick={() => onDeleteChapter(ch.id)}
+                              onClick={() => openDeleteModal(ch.id)}
                               className="p-1 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-sm transition-colors"
                               title="删除章节"
                             >
@@ -1513,6 +1542,42 @@ export default function EditStoryPage() {
             onInsert={handleAiInsert}
             onReplace={handleAiReplace}
           />
+        )}
+
+        {/* 删除章节确认弹窗 */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full mx-4 p-6 transform transition-all">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4">
+                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  删除章节
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  确定要删除这个章节吗？此操作不可恢复，章节内容将被永久删除。
+                </p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={closeDeleteModal}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={confirmDeleteChapter}
+                    disabled={loading}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? '删除中...' : '确认删除'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );

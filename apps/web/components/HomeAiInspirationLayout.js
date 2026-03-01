@@ -1,20 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
 import {
   SparklesIcon,
   BookOpenIcon,
   TrashIcon,
   ChevronRightIcon,
+  ChevronLeftIcon,
   Bars3Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { streamChat, addInspiration } from '../services/ai';
+import { streamNovelOptions, saveOptionAsInspiration } from '../services/ai';
 import { list as listInspirations, getById, deleteById } from '../services/inspirations';
-import { listStories, listMyStories } from '../services/stories';
-import HomePostList from './HomePostList';
 import { useToast } from './Toast';
+import QuickCreateNovelModal from './QuickCreateNovelModal';
 
 const PAGE_SIZE = 10;
 
@@ -30,14 +29,99 @@ function formatListDate(iso) {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 }
 
+const QUICK_PROMPTS = [
+  { label: '我想写修仙/都市…', text: '我想写修仙逆袭类小说，能给我几个开篇方案吗？' },
+  { label: '我还没想好，让 AI 帮我想', text: '我还没想好写什么，你可以从类型、主角、冲突里帮我想想，给我几个方向。' },
+];
+
+/** 判断是否为单条 option JSON（含 title） */
+function parseOneOptionLine(line) {
+  if (!line || !line.trim()) return null;
+  const s = line.trim();
+  if (!s.startsWith('{')) return null;
+  try {
+    const o = JSON.parse(s);
+    if (o && typeof o.title === 'string') return o;
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * 从流式缓冲解析：后端卡片式为 3 行 option JSON + 空行 + 引导文案。
+ * 返回 { options: [...], guidance: string }，options 最多 3 个，逐行解析出的。
+ */
+function parseStreamNovelOptions(buffer) {
+  const options = [];
+  let guidance = '';
+  const lines = buffer.split('\n');
+  let i = 0;
+  for (; i < lines.length && options.length < 3; i++) {
+    const opt = parseOneOptionLine(lines[i]);
+    if (opt) options.push(opt);
+    else break;
+  }
+  // 跳过空行（第 4 行）
+  if (i < lines.length && lines[i].trim() === '') i++;
+  guidance = lines.slice(i).join('\n').trim();
+  return { options, guidance };
+}
+
+/** 卡片式/非卡片式展示文案：最强噪音过滤（首尾符号、键名、全文键值对、null/true/false、JSON 转义还原） */
+function stripLeadingNoise(str) {
+  if (!str) return str;
+  const JSON_KEY_NAMES = 'guidanceText|title|storySummary|options|tags|styleId|toneId|viewpointId|aiPrompt|customStyle|description|name|id';
+  const LEADING_NOISE = /^[\s\{\}\[\]\"\,\:\\.;|#]+/;
+  const TRAILING_NOISE = /[\s\{\}\[\]\"\,\:\\.;|#]+$/;
+  const LEADING_JSON_KEY = new RegExp(`^\\s*\"?(${JSON_KEY_NAMES})\"?\\s*:\\s*\"?`, 'gi');
+  const LITERAL_LEADING = /^\s*(null|true|false)\s*[,:\s]*/i;
+  const LITERAL_TRAILING = /\s*[,:\s]*(null|true|false)\s*$/i;
+  const KEY_VALUE_STRING = new RegExp(`\"(${JSON_KEY_NAMES})\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"`, 'gi');
+  const KEY_VALUE_LITERAL = new RegExp(`\"(${JSON_KEY_NAMES})\"\\s*:\\s*(null|true|false)`, 'gi');
+
+  let s = str.trim();
+  s = s.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(KEY_VALUE_STRING, '').replace(KEY_VALUE_LITERAL, '');
+    s = s.replace(LEADING_NOISE, '').replace(TRAILING_NOISE, '').trim();
+    s = s.replace(LITERAL_LEADING, '').replace(LITERAL_TRAILING, '').trim();
+    s = s.replace(LEADING_JSON_KEY, '');
+  } while (s !== prev && prev.length > 0);
+
+  s = s.replace(LEADING_NOISE, '').replace(TRAILING_NOISE, '').trim();
+  s = s.replace(LITERAL_LEADING, '').replace(LITERAL_TRAILING, '').trim();
+  s = s.replace(/\s*,\s*,\s*/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
+  return s;
+}
+
+/** 完成时若为旧版单 JSON 或非 NDJSON，用此兜底解析 */
+function parseLegacyNovelOptions(raw) {
+  if (!raw || !raw.trim()) return { guidanceText: '', options: null };
+  let jsonStr = raw.trim();
+  const codeBlock = /```(?:json)?\s*([\s\S]*?)```/i.exec(jsonStr);
+  if (codeBlock) jsonStr = codeBlock[1].trim();
+  if (!jsonStr.startsWith('{')) return { guidanceText: raw.trim(), options: null };
+  try {
+    const o = JSON.parse(jsonStr);
+    const guidanceText = o.guidanceText != null ? String(o.guidanceText) : '';
+    const options = Array.isArray(o.options) && o.options.length > 0 ? o.options : null;
+    return { guidanceText, options };
+  } catch {
+    return { guidanceText: raw.trim(), options: null };
+  }
+}
+
 export default function HomeAiInspirationLayout() {
   const { addToast } = useToast();
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]); // { role, content, options? }
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const streamAccumulatedRef = useRef('');
 
   const [inspirations, setInspirations] = useState([]);
   const [inspirationsPage, setInspirationsPage] = useState(0);
@@ -50,18 +134,14 @@ export default function HomeAiInspirationLayout() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  const [posts, setPosts] = useState([]);
-  const [postsLoading, setPostsLoading] = useState(false);
-  const [postsError, setPostsError] = useState(null);
-  const [myPosts, setMyPosts] = useState([]);
-  const [myPostsLoading, setMyPostsLoading] = useState(false);
-  const [myPostsError, setMyPostsError] = useState(null);
-
-  // 保存到灵感库相关状态
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [addTitle, setAddTitle] = useState('');
-  const [addSaving, setAddSaving] = useState(false);
-  const [addError, setAddError] = useState(null);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateInitial, setQuickCreateInitial] = useState(null);
+  const [savingOptionId, setSavingOptionId] = useState(null);
+  const [streamingContent, setStreamingContent] = useState('');
+  /** 流式过程中解析出的选项（卡片式时逐卡出现） */
+  const [streamingOptions, setStreamingOptions] = useState([]);
+  /** 缓冲是否像在生成 option JSON，用于非卡片式时不显示占位卡 */
+  const [streamLikelyCardMode, setStreamLikelyCardMode] = useState(false);
 
   const loadInspirations = useCallback(async (page = 0) => {
     setInspirationsLoading(true);
@@ -72,41 +152,10 @@ export default function HomeAiInspirationLayout() {
       setInspirationsTotalPages(res?.totalPages ?? 0);
       setInspirationsTotalElements(res?.totalElements ?? 0);
     } catch (error) {
-      console.error('加载灵感列表失败:', error);
       setInspirations([]);
       setInspirationsError(error?.message || '加载失败');
     } finally {
       setInspirationsLoading(false);
-    }
-  }, []);
-
-  const loadPosts = useCallback(async () => {
-    setPostsLoading(true);
-    setPostsError(null);
-    try {
-      const res = await listStories({ page: 0, size: 6 });
-      setPosts(res?.content ?? []);
-    } catch (error) {
-      console.error('加载小说种子失败:', error);
-      setPosts([]);
-      setPostsError(error?.message || '加载失败');
-    } finally {
-      setPostsLoading(false);
-    }
-  }, []);
-
-  const loadMyPosts = useCallback(async () => {
-    setMyPostsLoading(true);
-    setMyPostsError(null);
-    try {
-      const res = await listMyStories({ page: 0, size: 2 });
-      setMyPosts(res?.content ?? []);
-    } catch (error) {
-      console.error('加载我的小说失败:', error);
-      setMyPosts([]);
-      setMyPostsError(error?.message || '加载失败');
-    } finally {
-      setMyPostsLoading(false);
     }
   }, []);
 
@@ -115,100 +164,22 @@ export default function HomeAiInspirationLayout() {
   }, [inspirationsPage, loadInspirations]);
 
   useEffect(() => {
-    loadPosts();
-    loadMyPosts();
-  }, [loadPosts, loadMyPosts]);
-
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      const scrollContainer = messagesEndRef.current.closest('.overflow-y-auto');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      } else {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-      }
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    if (rightOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [rightOpen]);
-
-  const handleNewThinking = useCallback(() => {
-    setMessages([]);
-    setRightOpen(false);
-  }, []);
-
-  useEffect(() => {
-    function onKeyDown(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'j') {
-        e.preventDefault();
-        handleNewThinking();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleNewThinking]);
-
-  async function loadDetail(id) {
-    if (selectedInspirationId === id && selectedInspiration) return;
-    setSelectedInspirationId(id);
-    setSelectedInspiration(null);
-    setDetailLoading(true);
-    try {
-      const data = await getById(id);
-      setSelectedInspiration(data);
-    } catch {
+    if (!selectedInspirationId) {
       setSelectedInspiration(null);
-    } finally {
-      setDetailLoading(false);
+      return;
     }
-  }
+    let cancelled = false;
+    setDetailLoading(true);
+    getById(selectedInspirationId)
+      .then(data => { if (!cancelled) setSelectedInspiration(data); })
+      .catch(() => { if (!cancelled) setSelectedInspiration(null); })
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedInspirationId]);
 
-  async function handleDeleteInspiration(id) {
-    try {
-      await deleteById(id);
-      setInspirations((prev) => prev.filter((i) => i.id !== id));
-      if (selectedInspirationId === id) {
-        setSelectedInspirationId(null);
-        setSelectedInspiration(null);
-      }
-    } catch (err) {
-      alert(err?.data?.error ?? err?.message ?? '删除失败');
-    } finally {
-      setDeleteConfirmId(null);
-    }
-  }
-
-  async function handleSaveToInspiration() {
-    if (addSaving) return;
-    setAddError(null);
-    setAddSaving(true);
-    try {
-      const msgs = messages.map((m) => ({ role: m.role, content: m.content }));
-      if (msgs.length === 0) {
-        setAddError('当前没有对话内容，先与 AI 聊几句再添加。');
-        setAddSaving(false);
-        return;
-      }
-      await addInspiration(addTitle.trim() || null, msgs);
-      setAddModalOpen(false);
-      // 刷新灵感列表
-      loadInspirations(inspirationsPage);
-      // 可选：清空当前对话或保留
-      // 这里选择保留对话，让用户可以继续基于当前对话进行创作
-    } catch (err) {
-      setAddError(err?.data?.error ?? err?.message ?? '保存失败');
-    } finally {
-      setAddSaving(false);
-    }
+  function handleNewThinking() {
+    setMessages([]);
+    setInput('');
   }
 
   function onSend(e) {
@@ -217,498 +188,453 @@ export default function HomeAiInspirationLayout() {
     if (!text || loading) return;
     setInput('');
     const userMsg = { role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg, { role: 'assistant', content: '' }]);
+    setMessages(prev => [...prev, userMsg]);
     setLoading(true);
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    streamChat(history, text, (chunk) => {
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant')
-          next[next.length - 1] = { ...last, content: last.content + chunk };
-        return next;
-      });
-    }, () => {
-      setLoading(false);
-    }, (err) => {
-      setLoading(false);
-      const msg = err?.message ?? '请求失败';
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.role === 'assistant')
-          next[next.length - 1] = { ...last, content: last.content || `[错误] ${msg}` };
-        return next;
-      });
-      addToast(msg, 'error', 3000);
-    });
+    setStreamingContent('');
+    setStreamingOptions([]);
+    setStreamLikelyCardMode(false);
+    streamAccumulatedRef.current = '';
+    const history = messages.map(m => ({ role: m.role, content: m.content || '' }));
+    setMessages(prev => [...prev, { role: 'assistant', content: '', options: null }]);
+    streamNovelOptions(
+      text,
+      history,
+      (chunk) => {
+        const s = typeof chunk === 'string' ? chunk : (chunk?.content ?? String(chunk ?? ''));
+        streamAccumulatedRef.current += s;
+        const raw = streamAccumulatedRef.current;
+        const { options: parsedOpts, guidance: parsedGuidance } = parseStreamNovelOptions(raw);
+        if (parsedOpts.length > 0) {
+          setStreamLikelyCardMode(true);
+          setStreamingOptions(parsedOpts);
+          setStreamingContent(stripLeadingNoise(parsedGuidance));
+        } else {
+          const looksLikeJson = raw.trim().startsWith('{') || /"title"\s*:/.test(raw);
+          setStreamLikelyCardMode(looksLikeJson);
+          if (looksLikeJson) {
+            setStreamingContent('正在生成第 1 个方案…');
+          } else {
+            setStreamingContent(stripLeadingNoise(raw));
+          }
+        }
+      },
+      () => {
+        const raw = streamAccumulatedRef.current;
+        const ndjson = parseStreamNovelOptions(raw);
+        let guidanceText = '';
+        let options = null;
+        if (ndjson.options.length > 0) {
+          guidanceText = stripLeadingNoise(ndjson.guidance);
+          options = ndjson.options;
+        } else {
+          const legacy = parseLegacyNovelOptions(raw);
+          guidanceText = stripLeadingNoise(legacy.guidanceText);
+          options = legacy.options;
+        }
+        setMessages(m => {
+          const next = [...m];
+          if (next.length > 0 && next[next.length - 1].role === 'assistant') {
+            next[next.length - 1] = { role: 'assistant', content: guidanceText, options: options || null };
+          }
+          return next;
+        });
+        setStreamingContent('');
+        setStreamingOptions([]);
+        setStreamLikelyCardMode(false);
+        setLoading(false);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      },
+      (err) => {
+        const msg = err?.message ?? '请求失败';
+        setMessages(m => {
+          const next = [...m];
+          if (next.length > 0 && next[next.length - 1].role === 'assistant' && next[next.length - 1].content === '') {
+            next[next.length - 1] = { role: 'assistant', content: `[错误] ${msg}`, options: null };
+          } else {
+            next.push({ role: 'assistant', content: `[错误] ${msg}`, options: null });
+          }
+          return next;
+        });
+        setStreamingContent('');
+        setStreamingOptions([]);
+        setStreamLikelyCardMode(false);
+        setLoading(false);
+        addToast(msg, 'error', 3000);
+      }
+    );
   }
 
-  const centerPanel = (
-    <div className="flex flex-col h-full bg-zinc-50/50 dark:bg-zinc-950/50 min-w-0">
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {messages.length === 0 ? (
-          <div className="max-w-3xl mx-auto space-y-8">
-            <div className="flex flex-col items-center justify-center min-h-[200px] text-center">
-              <SparklesIcon className="h-12 w-12 text-indigo-400 dark:text-indigo-500 mb-4" />
-              <p className="text-lg text-zinc-600 dark:text-zinc-400">欢迎回来，今天想写点什么？</p>
-              {inspirationsTotalElements > 0 && (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">你有 {inspirationsTotalElements} 条灵感，选一条开始写吧</p>
-              )}
-              {inspirationsTotalElements === 0 && (
-                <p className="text-sm text-zinc-400 dark:text-zinc-500 mt-1">输入问题，与 AI 一起找小说灵感并存入灵感库</p>
-              )}
-              <div className="mt-4">
-                <Link href="/write" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
-                  直接去写小说
-                </Link>
-              </div>
-            </div>
-            
-            {/* 示例对话 */}
-            <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 bg-white dark:bg-zinc-900/50">
-              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-4">创作示例</h3>
-              <div className="space-y-4">
-                <div className="flex justify-end">
-                  <div className="max-w-[80%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap break-words shadow-sm bg-indigo-600 text-white">
-                    <p className="text-xs opacity-80 mb-1">用户</p>
-                    <p className="text-sm">我想写一个关于未来世界的科幻小说，能给我一些灵感吗？</p>
-                  </div>
-                </div>
-                <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap break-words shadow-sm bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200">
-                    <p className="text-xs opacity-80 mb-1">AI</p>
-                    <p className="text-sm">未来世界科幻小说灵感：
+  async function handleSaveOptionAsInspiration(option) {
+    if (savingOptionId) return;
+    setSavingOptionId(option?.title ?? 'opt');
+    try {
+      await saveOptionAsInspiration(option);
+      addToast('已保存到灵感库');
+      loadInspirations(inspirationsPage);
+    } catch (err) {
+      addToast(err?.data?.error ?? err?.message ?? '保存失败', 'error');
+    } finally {
+      setSavingOptionId(null);
+    }
+  }
 
-1. 记忆交易市场：在2150年，人类可以买卖记忆，主角是一名记忆经纪人，发现了一个能改变世界的记忆。
+  function openQuickCreate(optionOrInspiration) {
+    if (typeof optionOrInspiration === 'object' && optionOrInspiration !== null && !optionOrInspiration.id) {
+      setQuickCreateInitial(optionOrInspiration);
+    } else if (typeof optionOrInspiration === 'object' && optionOrInspiration?.optionSnapshot) {
+      try {
+        const parsed = JSON.parse(optionOrInspiration.optionSnapshot);
+        setQuickCreateInitial(parsed);
+      } catch {
+        setQuickCreateInitial({ title: optionOrInspiration.title, storySummary: '' });
+      }
+    } else {
+      setQuickCreateInitial(null);
+    }
+    setQuickCreateOpen(true);
+  }
 
-2. 时间裂缝修复者：特殊部门负责修复时间线上的异常，主角在一次任务中发现了时间本身的秘密。
+  async function handleQuickCreateFromInspirationId(id) {
+    try {
+      const data = await getById(id);
+      openQuickCreate(data);
+    } catch (err) {
+      addToast(err?.message ?? '加载灵感失败', 'error');
+    }
+  }
 
-3. 意识上传后的社会：大部分人类已经将意识上传到数字世界，少数坚持保留肉身的人类形成了地下反抗组织。
+  function handleDeleteInspiration(id) {
+    if (deleteConfirmId === id) {
+      deleteById(id).then(() => {
+        setInspirations(prev => prev.filter(i => i.id !== id));
+        setInspirationsTotalElements(prev => Math.max(0, prev - 1));
+        if (selectedInspirationId === id) {
+          setSelectedInspirationId(null);
+          setSelectedInspiration(null);
+        }
+        setDeleteConfirmId(null);
+        addToast('已删除');
+      }).catch(err => addToast(err?.message ?? '删除失败', 'error'));
+    } else {
+      setDeleteConfirmId(id);
+    }
+  }
 
-4. 外星遗迹探索：在月球背面发现的外星技术改变了人类文明，但也带来了未知的危险。
-
-5. 基因编辑的伦理困境：基因编辑技术普及后，社会分化为不同基因等级的群体，主角试图打破这种不平等。</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* 快速开始提示 */}
-            <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 bg-zinc-50 dark:bg-zinc-800/50">
-              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">快速开始</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setInput('我想写一个奇幻小说，能给我一些灵感吗？');
-                    setTimeout(() => textareaRef.current?.focus(), 10);
-                  }}
-                  className="text-left p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm transition-colors"
-                >
-                  奇幻小说灵感
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setInput('如何构建一个吸引人的小说主角？');
-                    setTimeout(() => textareaRef.current?.focus(), 10);
-                  }}
-                  className="text-left p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm transition-colors"
-                >
-                  主角构建技巧
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setInput('我需要一个悬疑小说的剧情大纲');
-                    setTimeout(() => textareaRef.current?.focus(), 10);
-                  }}
-                  className="text-left p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm transition-colors"
-                >
-                  悬疑剧情大纲
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setInput('如何描写一个感人的爱情场景？');
-                    setTimeout(() => textareaRef.current?.focus(), 10);
-                  }}
-                  className="text-left p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm transition-colors"
-                >
-                  爱情场景描写
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[80%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap break-words shadow-sm ${
-                    m.role === 'user'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200'
-                  }`}
-                >
-                  <p className="text-xs opacity-80 mb-1">{m.role === 'user' ? '你' : 'AI'}</p>
-                  <p className="text-sm">{m.content}</p>
-                </div>
-              </div>
+  const conversationArea = (
+    <div className="flex-1 overflow-y-auto p-4 md:p-6">
+      {messages.length === 0 ? (
+        <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-[280px] text-center">
+          <SparklesIcon className="h-12 w-12 text-indigo-400 dark:text-indigo-500 mb-4" />
+          <p className="text-lg text-zinc-600 dark:text-zinc-400">输入创作想法，AI 给你 3 个小说方案</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">选一个保存到灵感库，或直接快速创作</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {QUICK_PROMPTS.map(({ label, text }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  setInput(text);
+                  setTimeout(() => textareaRef.current?.focus(), 10);
+                }}
+                className="px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-sm transition-colors"
+              >
+                {label}
+              </button>
             ))}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl px-5 py-3.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-500 shadow-sm">
-                  AI 正在思考…
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-3xl mx-auto space-y-4">
+          {messages.map((m, i) => {
+            const isLastAssistant = i === messages.length - 1 && m.role === 'assistant';
+            const isCardMode = isLastAssistant && streamingOptions.length > 0;
+            const optionsToShow = isCardMode ? streamingOptions : (m.options || []);
+            const showCardButtons = m.role === 'assistant' && m.options && m.options.length > 0 && !streamingContent && !loading;
+            const loadingNoCardsYet = isLastAssistant && loading && streamingOptions.length === 0;
+            const displayContent = isLastAssistant && streamingContent
+              ? streamingContent
+              : (loadingNoCardsYet && streamLikelyCardMode ? '正在生成第 1 个方案…' : (m.content || ''));
+            const showBubbleText = (displayContent || (isLastAssistant && loading));
+            const showCardGrid = m.role === 'assistant' && (optionsToShow.length > 0 || (isLastAssistant && loading && streamLikelyCardMode));
+            const placeholderCount = showCardGrid && loading && optionsToShow.length < 3 ? (3 - optionsToShow.length) : 0;
+            return (
+              <div key={i}>
+                <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
+                    m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200'
+                  }`}>
+                    <p className="text-xs opacity-80 mb-1">{m.role === 'user' ? '你' : 'AI'}</p>
+                    {showBubbleText && (
+                      <p className="text-sm whitespace-pre-wrap break-words">
+                        {displayContent || (loading ? '正在生成…' : '')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {showCardGrid && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {optionsToShow.map((opt, j) => (
+                      <div key={j} className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/80 p-4 shadow-sm">
+                        <h4 className="font-medium text-zinc-900 dark:text-zinc-100 text-sm mb-2 line-clamp-1">{opt.title || '未命名'}</h4>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-3 mb-3">{opt.storySummary || '无简介'}</p>
+                        {showCardButtons && (
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleSaveOptionAsInspiration(opt)} disabled={!!savingOptionId} className="btn btn-ghost text-xs py-1.5 px-2">
+                              {savingOptionId === (opt?.title ?? 'opt') ? '保存中…' : '保存到灵感'}
+                            </button>
+                            <button type="button" onClick={() => openQuickCreate(opt)} className="btn text-xs py-1.5 px-2 bg-indigo-600 text-white hover:bg-indigo-700">
+                              快速创作
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {placeholderCount > 0 && Array.from({ length: placeholderCount }, (_, k) => (
+                      <div key={`ph-${k}`} className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-4 shadow-sm animate-pulse">
+                        <div className="h-4 bg-zinc-200 dark:bg-zinc-600 rounded w-3/4 mb-2" />
+                        <div className="h-3 bg-zinc-200 dark:bg-zinc-600 rounded w-full mb-1" />
+                        <div className="h-3 bg-zinc-200 dark:bg-zinc-600 rounded w-5/6 mb-1" />
+                        <div className="h-3 bg-zinc-200 dark:bg-zinc-600 rounded w-4/5 mt-2" />
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">第 {optionsToShow.length + k + 1} 个方案生成中…</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl px-4 py-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-500">
+                AI 正在生成方案…
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+    </div>
+  );
+
+  const inputArea = (
+    <div className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+      <form onSubmit={onSend} className="flex gap-3">
+        <textarea
+          ref={textareaRef}
+          className="input min-h-[52px] max-h-32 py-3 px-4 resize-none rounded-xl flex-1 border-zinc-200 dark:border-zinc-700"
+          placeholder="输入创作想法，或让 AI 帮你想想写什么"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(e); } }}
+          disabled={loading}
+          rows={1}
+        />
+        <button type="submit" className="btn shrink-0 self-end py-3 px-5 rounded-xl" disabled={loading}>
+          发送
+        </button>
+      </form>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {QUICK_PROMPTS.map(({ label, text }, idx) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => { setInput(text); setTimeout(() => textareaRef.current?.focus(), 10); }}
+            className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-700/40 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-600 hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-800 text-[10px]">
+              {idx === 0 ? '✨' : '💡'}
+            </span>
+            <span>{label}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={handleNewThinking}
+          className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:text-zinc-800 dark:hover:text-zinc-200 hover:shadow-sm hover:border-zinc-300 dark:hover:border-zinc-600"
+        >
+          <span className="flex items-center justify-center w-4 h-4 rounded-full bg-zinc-100 dark:bg-zinc-700 text-[10px] group-hover:bg-zinc-200 dark:group-hover:bg-zinc-600 transition-colors">
+            🔄
+          </span>
+          <span>开启新的思考</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const rightSidebarContent = (onCloseDrawer) => (
+    <>
+      <div className={`shrink-0 border-b border-zinc-200 dark:border-zinc-800 flex items-center ${rightCollapsed ? 'p-2 justify-center h-12' : 'p-3 justify-between gap-2'}`}>
+        {!rightCollapsed && (
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+            <BookOpenIcon className="h-5 w-5 text-indigo-500" />
+            灵感库
+          </h2>
+        )}
+        <div className={`flex items-center ${rightCollapsed ? '' : 'gap-1'}`}>
+          <button
+            type="button"
+            onClick={() => setRightCollapsed(!rightCollapsed)}
+            className={`rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-200 ${rightCollapsed ? 'p-1.5 hover:scale-110' : 'p-2'}`}
+            aria-label={rightCollapsed ? '展开' : '收起'}
+            title={rightCollapsed ? '展开灵感库' : '收起灵感库'}
+          >
+            {rightCollapsed ? <ChevronLeftIcon className="h-5 w-5" /> : <ChevronRightIcon className="h-5 w-5" />}
+          </button>
+          {!rightCollapsed && onCloseDrawer && (
+            <button type="button" onClick={onCloseDrawer} className="p-2 rounded-lg text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="关闭">
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+      </div>
+      {rightCollapsed ? (
+        <div className="flex-1 flex flex-col items-center py-4 gap-3 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => setRightCollapsed(false)}
+            className="relative p-2 rounded-xl text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all duration-200 group"
+            title="灵感库"
+          >
+            <BookOpenIcon className="h-5 w-5" />
+            {inspirationsTotalElements > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-bold bg-indigo-500 text-white rounded-full">
+                {inspirationsTotalElements > 99 ? '99+' : inspirationsTotalElements}
+              </span>
+            )}
+          </button>
+          <div className="w-6 h-px bg-zinc-200 dark:bg-zinc-700 my-1" />
+          {inspirations.slice(0, 5).map((item, idx) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setRightCollapsed(false);
+                setSelectedInspirationId(item.id);
+              }}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium transition-all duration-200 ${
+                selectedInspirationId === item.id
+                  ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title={item.title || '（无标题）'}
+            >
+              {idx + 1}
+            </button>
+          ))}
+          {inspirations.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setRightCollapsed(false)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              title="查看更多"
+            >
+              +{inspirations.length - 5}
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800 p-2 overflow-y-auto">
+            {inspirationsLoading ? (
+              <p className="text-sm text-zinc-500 py-2">加载中…</p>
+            ) : inspirationsError ? (
+              <div>
+                <p className="text-sm text-zinc-500">加载失败</p>
+                <button type="button" onClick={() => loadInspirations(inspirationsPage)} className="text-xs text-indigo-600 hover:underline">重试</button>
+              </div>
+            ) : inspirations.length === 0 ? (
+              <p className="text-sm text-zinc-500 py-2">暂无灵感，从对话中选方案保存</p>
+            ) : (
+              <ul className="space-y-1 max-h-[200px] overflow-y-auto">
+                {inspirations.map(item => (
+                  <li key={item.id} className="group flex items-center gap-2">
+                    <button type="button" onClick={() => setSelectedInspirationId(item.id)} className={`flex-1 min-w-0 text-left rounded-lg px-3 py-2 text-sm ${selectedInspirationId === item.id ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-900 dark:text-indigo-100' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300'}`}>
+                      <span className="block truncate">{item.title || '（无标题）'}</span>
+                      <span className="text-xs text-zinc-400">{formatListDate(item.createdAt)}</span>
+                    </button>
+                    <button type="button" onClick={() => handleQuickCreateFromInspirationId(item.id)} className="shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:underline opacity-0 group-hover:opacity-100" title="快速创作">创作</button>
+                    {deleteConfirmId === item.id ? (
+                      <span className="flex gap-1 shrink-0">
+                        <button type="button" onClick={() => handleDeleteInspiration(item.id)} className="text-xs text-red-600">确认</button>
+                        <button type="button" onClick={() => setDeleteConfirmId(null)} className="text-xs text-zinc-500">取消</button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setDeleteConfirmId(item.id)} className="shrink-0 p-1.5 rounded text-zinc-400 hover:text-red-600 opacity-0 group-hover:opacity-100" aria-label="删除">
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {inspirationsTotalPages > 1 && (
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700 text-xs">
+                <span className="text-zinc-500">{inspirationsTotalElements} 条</span>
+                <div className="flex gap-1">
+                  <button type="button" className="btn btn-ghost py-1 px-2" disabled={inspirationsPage <= 0} onClick={() => setInspirationsPage(p => Math.max(0, p - 1))}>上一页</button>
+                  <span className="self-center text-zinc-500">{inspirationsPage + 1}/{inspirationsTotalPages}</span>
+                  <button type="button" className="btn btn-ghost py-1 px-2" disabled={inspirationsPage >= inspirationsTotalPages - 1} onClick={() => setInspirationsPage(p => p + 1)}>下一页</button>
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
-        )}
-      </div>
-      <div className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-3">
-            <form onSubmit={onSend} className="flex gap-3 flex-1">
-              <textarea
-                ref={textareaRef}
-                className="input min-h-[52px] max-h-32 py-3 px-4 resize-none rounded-xl border-zinc-200 dark:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                placeholder="给 AI 发送消息，按 Enter 发送，Shift+Enter 换行"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    onSend(e);
-                  }
-                }}
-                disabled={loading}
-                rows={1}
-              />
-              <button type="submit" className="btn shrink-0 self-end py-3 px-5 rounded-xl font-medium" disabled={loading}>
-                发送
-              </button>
-            </form>
+          <div className="flex-1 min-h-0 overflow-y-auto p-3">
+            <p className="text-xs text-zinc-500 mb-2">选中灵感</p>
+            {!selectedInspirationId ? (
+              <p className="text-xs text-zinc-400">点击左侧一条查看</p>
+            ) : detailLoading ? (
+              <p className="text-sm text-zinc-500">加载中…</p>
+            ) : selectedInspiration ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{selectedInspiration.title || '（无标题）'}</p>
+                {selectedInspiration.optionSnapshot ? (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-4">已保存为小说方案，可快速创作</p>
+                ) : (
+                  (selectedInspiration.messages || []).slice(0, 3).map((mm, i) => (
+                    <p key={i} className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2">{mm.content}</p>
+                  ))
+                )}
+                <button type="button" onClick={() => handleQuickCreateFromInspirationId(selectedInspirationId)} className="btn text-sm py-2 w-full bg-indigo-600 text-white hover:bg-indigo-700 mt-2">
+                  快速创作
+                </button>
+              </div>
+            ) : null}
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={handleNewThinking}
-                className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-              >
-                <SparklesIcon className="h-4 w-4" />
-                开启新的思考
-              </button>
-              {messages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddTitle('');
-                    setAddError(null);
-                    setAddModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                >
-                  <BookOpenIcon className="h-4 w-4" />
-                  保存到灵感库
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">Ctrl+J 清空上下文</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const rightSidebar = (onCloseDrawer) => (
-    <div className="flex flex-col h-full bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 min-w-0">
-      <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 shrink-0 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
-          <BookOpenIcon className="h-5 w-5 text-indigo-500" />
-          灵感库
-        </h2>
-        {onCloseDrawer && (
-          <button
-            type="button"
-            onClick={onCloseDrawer}
-            className="p-2 rounded-lg text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            aria-label="关闭"
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        )}
-      </div>
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className="shrink-0 border-b border-zinc-200 dark:border-zinc-800 p-2">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">灵感列表</p>
-          {inspirationsLoading ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 py-2">加载中…</p>
-          ) : inspirationsError ? (
-            <div className="space-y-3">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">加载失败，点击重试</p>
-              <div className="border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-3 text-center">
-                <button 
-                  type="button" 
-                  onClick={() => loadInspirations(inspirationsPage)}
-                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  重试
-                </button>
-              </div>
-            </div>
-          ) : inspirations.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无灵感</p>
-              <div className="border border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg p-3 text-center">
-                <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-2">开始与 AI 对话，获取创作灵感</p>
-                <button 
-                  type="button" 
-                  onClick={() => setRightOpen(false)}
-                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
-                >
-                  去对话获取灵感
-                </button>
-              </div>
-              <div className="text-xs text-zinc-400 dark:text-zinc-500">
-                <p className="mb-1">灵感示例：</p>
-                <ul className="space-y-1">
-                  <li className="flex items-center gap-1">
-                    <span className="text-xs">•</span>
-                    <span>科幻小说世界观设定</span>
-                  </li>
-                  <li className="flex items-center gap-1">
-                    <span className="text-xs">•</span>
-                    <span>奇幻小说魔法系统</span>
-                  </li>
-                  <li className="flex items-center gap-1">
-                    <span className="text-xs">•</span>
-                    <span>悬疑小说剧情大纲</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <ul className="space-y-1 max-h-[180px] overflow-y-auto">
-              {inspirations.map((item) => (
-                <li key={item.id} className="group flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => loadDetail(item.id)}
-                    className={`flex-1 min-w-0 text-left rounded-lg px-3 py-2 text-sm transition-colors ${
-                      selectedInspirationId === item.id
-                        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-900 dark:text-indigo-100'
-                        : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
-                    }`}
-                  >
-                    <span className="block truncate">{item.title || '（无标题）'}</span>
-                    <span className="text-xs text-zinc-400 dark:text-zinc-500">{formatListDate(item.createdAt)}</span>
-                  </button>
-                  {deleteConfirmId === item.id ? (
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteInspiration(item.id)}
-                        className="text-xs text-red-600 dark:text-red-400 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                      >
-                        确认
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(null)}
-                        className="text-xs text-zinc-500 px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmId(item.id);
-                      }}
-                      className="shrink-0 p-1.5 rounded text-zinc-400 hover:text-red-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100"
-                      aria-label="删除"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {inspirationsTotalPages > 1 && (
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
-              <span className="text-xs text-zinc-500">共 {inspirationsTotalElements} 条</span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  className="btn btn-ghost py-1 px-2 text-xs"
-                  disabled={inspirationsPage <= 0}
-                  onClick={() => setInspirationsPage((p) => Math.max(0, p - 1))}
-                >
-                  上一页
-                </button>
-                <span className="text-xs self-center text-zinc-500">
-                  {inspirationsPage + 1} / {inspirationsTotalPages}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-ghost py-1 px-2 text-xs"
-                  disabled={inspirationsPage >= inspirationsTotalPages - 1}
-                  onClick={() => setInspirationsPage((p) => Math.min(inspirationsTotalPages - 1, p + 1))}
-                >
-                  下一页
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">选中灵感详情</p>
-          {!selectedInspirationId ? (
-            <div className="space-y-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50">
-              <h4 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">灵感详情</h4>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                从左侧选择一个灵感，查看详细内容
-              </p>
-              <div className="border border-dashed border-zinc-300 dark:border-zinc-600 rounded p-3 text-center">
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                  灵感可以帮助你：
-                </p>
-                <ul className="text-xs text-zinc-400 dark:text-zinc-500 mt-2 space-y-1">
-                  <li className="flex items-center gap-1 justify-center">
-                    <span>•</span>
-                    <span>保存创作思路</span>
-                  </li>
-                  <li className="flex items-center gap-1 justify-center">
-                    <span>•</span>
-                    <span>整理故事脉络</span>
-                  </li>
-                  <li className="flex items-center gap-1 justify-center">
-                    <span>•</span>
-                    <span>快速开始创作</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          ) : detailLoading ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">加载中…</p>
-          ) : selectedInspiration ? (
-            <div className="space-y-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3 text-sm">
-              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                {selectedInspiration.title || '（无标题）'} · {formatListDate(selectedInspiration.createdAt)}
-              </p>
-              {(selectedInspiration.messages || []).map((m, i) => (
-                <div key={i} className={m.role === 'user' ? 'text-right' : ''}>
-                  <span className="text-xs text-zinc-400 dark:text-zinc-500">{m.role === 'user' ? '你' : 'AI'}</span>
-                  <div className="whitespace-pre-wrap break-words text-zinc-700 dark:text-zinc-300">{m.content}</div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div className="shrink-0 p-3 border-t border-zinc-200 dark:border-zinc-800">
-        <Link
-          href={selectedInspirationId ? `/write?inspiration=${selectedInspirationId}` : '/write'}
-          className={`flex items-center gap-1 text-sm hover:underline ${selectedInspirationId ? 'text-indigo-700 dark:text-indigo-300 font-medium' : 'text-indigo-600 dark:text-indigo-400'}`}
-        >
-          {selectedInspirationId ? '从本灵感开始创作' : '开始创作'}
-          <ChevronRightIcon className="h-4 w-4" />
-        </Link>
-      </div>
-    </div>
+        </>
+      )}
+    </>
   );
 
   return (
-    <div className="flex flex-col space-y-6">
-      {/* 主要内容区域 */}
-      <div className="flex flex-col lg:flex-row rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900 shadow-sm h-[90vh] min-h-[650px]">
-        <section className="flex-1 flex flex-col min-w-0 relative">
+    <div className="flex flex-col h-[calc(100vh-4rem)] min-h-[500px]">
+      <div className="flex flex-1 min-h-0 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">
+        <section className="flex-1 flex flex-col min-w-0">
           <div className="lg:hidden flex items-center gap-2 p-2 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-            <button
-              type="button"
-              onClick={() => setRightOpen(true)}
-              className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              aria-label="灵感库"
-            >
+            <button type="button" onClick={() => setRightOpen(true)} className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="灵感库">
               <Bars3Icon className="h-5 w-5" />
             </button>
           </div>
-          {centerPanel}
+          {conversationArea}
+          {inputArea}
         </section>
-        <aside className="hidden lg:flex lg:w-[320px] lg:shrink-0 lg:flex-col h-full">
-          {rightSidebar()}
+        <aside
+          className={`hidden lg:flex flex-col border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all duration-300 ease-in-out overflow-hidden ${
+            rightCollapsed ? 'w-14 shrink-0' : 'w-[320px] shrink-0'
+          }`}
+        >
+          {rightSidebarContent()}
         </aside>
         {rightOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
             <div className="absolute inset-0 bg-black/50" onClick={() => setRightOpen(false)} />
-            <div className="absolute right-0 top-0 bottom-0 w-[320px] max-w-[85vw] shadow-xl">
-              {rightSidebar(() => setRightOpen(false))}
+            <div className="absolute right-0 top-0 bottom-0 w-[320px] max-w-[85vw] shadow-xl bg-white dark:bg-zinc-900 flex flex-col">
+              {rightSidebarContent(() => setRightOpen(false))}
             </div>
           </div>
         )}
       </div>
-      
-      {/* 我的小说 */}
-      {myPostsError ? (
-        <HomePostList 
-          posts={myPosts} 
-          loading={myPostsLoading} 
-          error={myPostsError}
-          onRetry={loadMyPosts}
-          title="你的小说"
-        />
-      ) : myPosts.length > 0 && (
-        <HomePostList 
-          posts={myPosts} 
-          loading={myPostsLoading} 
-          title="你的小说"
-        />
-      )}
-      
-      {/* 小说种子推荐 */}
-      <HomePostList 
-        posts={posts} 
-        loading={postsLoading} 
-        error={postsError}
-        onRetry={loadPosts}
-        title="小说种子推荐" 
-      />
-      
-      {/* 保存到灵感库弹窗 */}
-      {addModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => !addSaving && setAddModalOpen(false)}>
-          <div className="card p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-2">保存到灵感库</h3>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">为这条灵感选一个标题（可选）</p>
-            <input
-              type="text"
-              className="input mb-4"
-              placeholder="例如：关于未来世界的科幻小说灵感"
-              value={addTitle}
-              onChange={(e) => setAddTitle(e.target.value)}
-              maxLength={200}
-            />
-            {addError && (
-              <p className="text-sm text-red-600 dark:text-red-400 mb-3">{addError}</p>
-            )}
-            <div className="flex gap-2 justify-end">
-              <button type="button" className="btn btn-ghost" onClick={() => !addSaving && setAddModalOpen(false)} disabled={addSaving}>
-                取消
-              </button>
-              <button type="button" className="btn" onClick={handleSaveToInspiration} disabled={addSaving}>
-                {addSaving ? '保存中…' : '保存'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      <QuickCreateNovelModal open={quickCreateOpen} onClose={() => setQuickCreateOpen(false)} initialValues={quickCreateInitial} />
     </div>
   );
 }

@@ -9,7 +9,7 @@ export async function list(page = 0, size = 10) {
 }
 
 /**
- * 按 ID 获取单条灵感详情（含完整对话）
+ * 按 ID 获取单条灵感详情（含完整对话与 optionSnapshot，用于快速创作预填）
  */
 export async function getById(id) {
   return api.get(`/inspirations/${id}`);

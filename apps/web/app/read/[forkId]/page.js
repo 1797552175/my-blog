@@ -9,6 +9,7 @@ import { getFork, listCommits, choose, rollback, createPullRequest, listBookmark
 import { listChaptersBySlug } from '../../../services/stories';
 import { generateDirectionOptions, streamAiWrite } from '../../../services/aiWriting';
 import { isAuthed } from '../../../services/auth';
+import { getMe } from '../../../services/user';
 import { api } from '../../../lib/api';
 import { useToast } from '../../../components/Toast';
 
@@ -19,6 +20,7 @@ export default function ReadPage() {
   const { addToast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [fork, setFork] = useState(null);
   const [seed, setSeed] = useState(null);
   const [authorChapters, setAuthorChapters] = useState([]); // 从第 N 章续写时，作者的前 N 章
@@ -50,6 +52,8 @@ export default function ReadPage() {
   const [generatingChapter, setGeneratingChapter] = useState(false); // 是否正在生成章节
   const [generatingStage, setGeneratingStage] = useState(''); // 生成阶段：'analyzing' | 'generating' | 'polishing' | 'completing'
   const [isProcessingSummary, setIsProcessingSummary] = useState(false); // 是否正在处理摘要
+  const [showPrGuide, setShowPrGuide] = useState(false); // 是否显示PR引导弹窗
+  const [prGuideChapterCount, setPrGuideChapterCount] = useState(0); // PR引导显示的章节数
   const abortControllerRef = useRef(null); // 用于取消生成
 
   const load = useCallback(async () => {
@@ -135,6 +139,13 @@ export default function ReadPage() {
   useEffect(() => {
     setIsMounted(true);
     setIsAuthenticated(isAuthed());
+    if (isAuthed()) {
+      getMe().then(data => {
+        setIsAdmin(data.admin ?? false);
+      }).catch(() => {
+        setIsAdmin(false);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -453,6 +464,13 @@ export default function ReadPage() {
           
           addToast('章节生成完成');
           
+          // 检查是否应该显示PR引导（生成了3章或以上）
+          const totalAiChapters = aiPreviewChapters.length + 1;
+          if (totalAiChapters >= 3 && totalAiChapters % 3 === 0) {
+            setPrGuideChapterCount(totalAiChapters);
+            setShowPrGuide(true);
+          }
+          
           // 开始处理所有未生成摘要的章节
           setIsProcessingSummary(true);
           
@@ -524,13 +542,15 @@ export default function ReadPage() {
           >
             {showChapterList ? '收起目录' : '章节目录'}
           </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            {showHistory ? '收起历史' : '版本历史'}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              {showHistory ? '收起历史' : '版本历史'}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-sm btn-ghost"
@@ -686,7 +706,7 @@ export default function ReadPage() {
         </div>
       ) : null}
 
-      {showHistory && commits.length > 0 ? (
+      {isAdmin && showHistory && commits.length > 0 ? (
         <div className="mb-6 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">版本历史</h3>
@@ -1122,6 +1142,62 @@ export default function ReadPage() {
                   }}
                 >
                   确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PR引导弹窗 */}
+      {showPrGuide && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" 
+          onClick={() => setShowPrGuide(false)}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl max-w-md w-full mx-4 border border-zinc-200 dark:border-zinc-700 overflow-hidden" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <span className="text-2xl">🎉</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+                    已生成 {prGuideChapterCount} 章！
+                  </h3>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    考虑提交PR分享你的创作
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 mb-4">
+                <p className="text-sm text-purple-800 dark:text-purple-200">
+                  你已经用AI生成了 <strong>{prGuideChapterCount}</strong> 章内容！
+                  可以创建PR提交给原作者审核，审核通过后将作为新的故事分支线。
+                </p>
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+                  onClick={() => setShowPrGuide(false)}
+                >
+                  继续阅读
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+                  onClick={() => {
+                    setShowPrGuide(false);
+                    router.push(`/me/pr-novels/create?storyId=${fork?.storyId}&fromChapter=${authorChapters.length}`);
+                  }}
+                >
+                  创建PR
                 </button>
               </div>
             </div>

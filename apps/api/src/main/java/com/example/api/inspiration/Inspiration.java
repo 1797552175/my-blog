@@ -26,6 +26,10 @@ public class Inspiration extends BaseEntity {
     @Column(nullable = true, length = 200)
     private String title;
 
+    /** 小说方案快照（JSON），用于快速创作预填：title, storySummary, tags, styleId, customStyle, toneId, viewpointId, aiPrompt 等 */
+    @Column(name = "option_snapshot", columnDefinition = "JSON")
+    private String optionSnapshot;
+
     protected Inspiration() {
     }
 
@@ -48,5 +52,13 @@ public class Inspiration extends BaseEntity {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getOptionSnapshot() {
+        return optionSnapshot;
+    }
+
+    public void setOptionSnapshot(String optionSnapshot) {
+        this.optionSnapshot = optionSnapshot;
     }
 }

@@ -25,11 +25,12 @@ public record StoryListItemResponse(
         String storySummary,
         String authorUsername,
         List<String> tags,
-        String createdAt
+        String createdAt,
+        Integer chapterCount
 ) {
 
     public static StoryListItemResponse fromEntity(Story story) {
-        return fromEntity(story, story.hasContent());
+        return fromEntity(story, story.hasContent(), 0);
     }
 
     /**
@@ -38,6 +39,10 @@ public record StoryListItemResponse(
     private static final DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
 
     public static StoryListItemResponse fromEntity(Story story, boolean hasContent) {
+        return fromEntity(story, hasContent, 0);
+    }
+
+    public static StoryListItemResponse fromEntity(Story story, boolean hasContent, int chapterCount) {
         User author = story.getAuthor();
         List<String> tags = story.getTags();
         return new StoryListItemResponse(
@@ -55,7 +60,8 @@ public record StoryListItemResponse(
                 story.getStorySummary(),
                 author != null ? author.getUsername() : null,
                 tags != null ? tags : List.of(),
-                story.getCreatedAt() != null ? formatter.format(story.getCreatedAt()) : null
+                story.getCreatedAt() != null ? formatter.format(story.getCreatedAt()) : null,
+                chapterCount
         );
     }
 }
