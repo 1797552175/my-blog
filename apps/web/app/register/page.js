@@ -44,19 +44,22 @@ export default function RegisterPage() {
   // 密码强度检测函数
   const checkPasswordStrength = (password) => {
     let score = 0;
-    if (password.length >= 8) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[a-z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
+    const hasLength = password.length >= 8;
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
     
-    const messages = ['非常弱', '弱', '中等', '强', '非常强'];
-    const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
+    if (hasLength) score++;
+    if (hasLetter) score++;
+    if (hasNumber) score++;
+    
+    const messages = ['非常弱', '弱', '中等', '强'];
+    const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'];
     
     return {
       score,
       message: messages[score],
-      color: colors[score]
+      color: colors[score],
+      isValid: hasLength && hasLetter && hasNumber
     };
   };
 
@@ -72,8 +75,8 @@ export default function RegisterPage() {
     setError(null);
     
     // 前端验证密码强度
-    if (passwordStrength.score < 3) {
-      setError('密码强度不足，请使用包含大小写字母、数字和特殊字符的密码');
+    if (!passwordStrength.isValid) {
+      setError('密码必须包含字母和数字，长度至少8位');
       if (errorRef.current) {
         errorRef.current.focus();
       }
@@ -147,18 +150,18 @@ export default function RegisterPage() {
                 <div className="mt-2">
                   <div className="flex justify-between text-xs mb-1">
                     <span>密码强度：</span>
-                    <span className={`font-medium ${passwordStrength.score >= 3 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className={`font-medium ${passwordStrength.isValid ? 'text-green-600' : 'text-red-600'}`}>
                       {passwordStrength.message}
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
                     <div 
                       className={`h-full ${passwordStrength.color} transition-all duration-300`}
-                      style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                      style={{ width: `${(passwordStrength.score / 3) * 100}%` }}
                     ></div>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    密码需包含：大小写字母、数字和特殊字符，长度至少8位
+                  <div className={`text-xs mt-1 ${passwordStrength.isValid ? 'text-green-500' : 'text-red-500'}`}>
+                    密码需包含：字母和数字，长度至少8位
                   </div>
                 </div>
               )}

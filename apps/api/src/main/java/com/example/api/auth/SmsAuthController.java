@@ -69,10 +69,10 @@ public class SmsAuthController {
             throw new ApiException(HttpStatus.BAD_REQUEST, "请输入正确的手机号");
         }
         if (!smsService.verifyCode(phone, SmsScene.LOGIN_REGISTER, request.code())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "验证码错误或已过期");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "验证码错误或已过期");
         }
         User user = userRepository.findByPhone(phone)
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "该手机号未绑定任何账号，请先注册或使用密码登录"));
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "该手机号未绑定任何账号，请先注册或使用密码登录"));
         String token = jwtTokenProvider.generateToken(user);
         return new com.example.api.auth.dto.AuthResponse(token, user.getUsername());
     }

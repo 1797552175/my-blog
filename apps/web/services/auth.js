@@ -5,8 +5,8 @@ export async function sendSms(phone, scene) {
   await api.post('/auth/sms/send', { phone, scene });
 }
 
-export async function register({ username, email, password, phone, smsCode }) {
-  return api.post('/auth/register', { username, email, password, phone, smsCode });
+export async function register({ username, password, phone, smsCode }) {
+  return api.post('/auth/register', { username, password, phone, smsCode });
 }
 
 export async function login({ username, password }) {

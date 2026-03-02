@@ -62,14 +62,11 @@ public class AuthController {
         if (userRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.CONFLICT, "用户名已被使用");
         }
-        if (userRepository.existsByEmail(request.email())) {
-            throw new ApiException(HttpStatus.CONFLICT, "邮箱已被使用");
-        }
         if (userRepository.existsByPhone(phone)) {
             throw new ApiException(HttpStatus.CONFLICT, "该手机号已注册");
         }
 
-        User user = new User(request.username(), request.email(), passwordEncoder.encode(request.password()));
+        User user = new User(request.username(), null, passwordEncoder.encode(request.password()));
         user.setPhone(phone);
         User savedUser = userRepository.save(user);
         return new RegisterResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail());
@@ -79,10 +76,10 @@ public class AuthController {
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         User user = userRepository.findByUsername(request.username()).orElse(null);
         if (user == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "账户未注册");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "账户未注册");
         }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "密码错误");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "密码错误");
         }
         String token = jwtTokenProvider.generateToken(user);
         return new AuthResponse(token, user.getUsername());

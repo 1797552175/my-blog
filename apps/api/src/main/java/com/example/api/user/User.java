@@ -19,7 +19,7 @@ public class User extends BaseEntity implements org.springframework.security.cor
     @Column(nullable = false, length = 32, unique = true)
     private String username;
 
-    @Column(nullable = false, length = 128, unique = true)
+    @Column(nullable = true, length = 128, unique = true)
     private String email;
 
     @Column(length = 20, unique = true)

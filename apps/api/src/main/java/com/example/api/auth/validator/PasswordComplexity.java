@@ -9,7 +9,7 @@ import java.lang.annotation.*;
 @Constraint(validatedBy = PasswordComplexityValidator.class)
 @Documented
 public @interface PasswordComplexity {
-    String message() default "密码必须包含大小写字母、数字和特殊字符，长度至少8位";
+    String message() default "密码必须包含字母和数字，长度至少8位";
     Class<?>[] groups() default {};
     Class<? extends Payload>[] payload() default {};
 }
