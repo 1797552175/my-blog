@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { createForkBySlug, checkForkExists } from '../services/readerForks';
 import { starStory, getStoryBySlug } from '../services/stories';
@@ -129,6 +130,7 @@ export default function AddToReadsButton({ slug, isInteractive, storyId, chapter
           {loading ? '处理中...' : added ? '已在阅读列表' : '添加到我的阅读'}
         </button>
         <button
+          type="button"
           onClick={handlePrClick}
           className="px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors"
         >
@@ -139,7 +141,7 @@ export default function AddToReadsButton({ slug, isInteractive, storyId, chapter
         <p className="text-xs text-red-600">{error}</p>
       )}
 
-      {showPrModal && (
+      {showPrModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-sm w-full mx-4 p-6">
             <h3 className="text-lg font-semibold mb-4">创建小说分支（PR）</h3>
@@ -181,6 +183,7 @@ export default function AddToReadsButton({ slug, isInteractive, storyId, chapter
 
             <div className="flex gap-2 mb-4">
               <button 
+                type="button"
                 onClick={handlePrSubmit} 
                 disabled={creating}
                 className="btn btn-primary flex-1"
@@ -188,6 +191,7 @@ export default function AddToReadsButton({ slug, isInteractive, storyId, chapter
                 {creating ? '创建中...' : '创建并添加到我的阅读'}
               </button>
               <button 
+                type="button"
                 onClick={() => setShowPrModal(false)} 
                 className="btn btn-ghost"
                 disabled={creating}
@@ -208,7 +212,8 @@ export default function AddToReadsButton({ slug, isInteractive, storyId, chapter
               </ul>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
