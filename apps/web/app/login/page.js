@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [smsCooldown, setSmsCooldown] = useState(0);
+  const [smsSending, setSmsSending] = useState(false);
   const [error, setError] = useState(null);
   const errorRef = useRef(null);
 
@@ -69,11 +70,14 @@ export default function LoginPage() {
       return;
     }
     setError(null);
+    setSmsSending(true);
     try {
       await sendSms(p, 'LOGIN_REGISTER');
       setSmsCooldown(60);
     } catch (err) {
       setError(err?.message ?? '发送验证码失败');
+    } finally {
+      setSmsSending(false);
     }
   }
 
@@ -179,8 +183,8 @@ export default function LoginPage() {
                     maxLength={11}
                     required
                   />
-                  <button type="button" className="btn whitespace-nowrap px-4" onClick={onSendSms} disabled={smsCooldown > 0 || smsLoading}>
-                    {smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
+                  <button type="button" className="btn whitespace-nowrap px-4" onClick={onSendSms} disabled={smsCooldown > 0 || smsLoading || smsSending}>
+                    {smsSending ? '发送中…' : smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
                   </button>
                 </div>
               </div>

@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [smsCooldown, setSmsCooldown] = useState(0);
+  const [smsSending, setSmsSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
@@ -33,11 +34,14 @@ export default function RegisterPage() {
       return;
     }
     setError(null);
+    setSmsSending(true);
     try {
       await sendSms(p, 'LOGIN_REGISTER');
       setSmsCooldown(60);
     } catch (err) {
       setError(err?.message ?? '发送验证码失败');
+    } finally {
+      setSmsSending(false);
     }
   }
 
@@ -183,9 +187,9 @@ export default function RegisterPage() {
                   type="button"
                   className="btn whitespace-nowrap px-4"
                   onClick={onSendSms}
-                  disabled={smsCooldown > 0 || loading}
+                  disabled={smsCooldown > 0 || loading || smsSending}
                 >
-                  {smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
+                  {smsSending ? '发送中…' : smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
                 </button>
               </div>
             </div>

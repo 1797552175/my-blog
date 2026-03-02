@@ -13,6 +13,7 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [smsCooldown, setSmsCooldown] = useState(0);
+  const [smsSending, setSmsSending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -32,7 +33,7 @@ export default function ForgotPasswordPage() {
       return;
     }
     setError(null);
-    setLoading(true);
+    setSmsSending(true);
     try {
       await resetPasswordRequest(p);
       setSmsCooldown(60);
@@ -41,7 +42,7 @@ export default function ForgotPasswordPage() {
       setError(err?.message ?? '发送验证码失败');
       if (errorRef.current) errorRef.current.focus();
     } finally {
-      setLoading(false);
+      setSmsSending(false);
     }
   }
 
@@ -114,9 +115,9 @@ export default function ForgotPasswordPage() {
                   <button
                     type="submit"
                     className="btn whitespace-nowrap px-4"
-                    disabled={smsCooldown > 0 || loading}
+                    disabled={smsCooldown > 0 || smsSending}
                   >
-                    {smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
+                    {smsSending ? '发送中…' : smsCooldown > 0 ? `${smsCooldown}秒后重发` : '获取验证码'}
                   </button>
                 </div>
               </div>

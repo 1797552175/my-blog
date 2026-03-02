@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const [phoneValue, setPhoneValue] = useState('');
   const [phoneCode, setPhoneCode] = useState('');
   const [phoneCooldown, setPhoneCooldown] = useState(0);
+  const [phoneSmsSending, setPhoneSmsSending] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
   const [phoneError, setPhoneError] = useState(null);
   const [phoneSuccess, setPhoneSuccess] = useState(false);
@@ -182,12 +183,15 @@ export default function SettingsPage() {
       return;
     }
     setPhoneError(null);
+    setPhoneSmsSending(true);
     try {
       const scene = profile?.phone ? 'CHANGE_PHONE' : 'BIND_PHONE';
       await sendSms(p, scene);
       setPhoneCooldown(60);
     } catch (err) {
       setPhoneError(err?.message ?? '发送验证码失败');
+    } finally {
+      setPhoneSmsSending(false);
     }
   }
 
@@ -341,9 +345,9 @@ export default function SettingsPage() {
                       type="button"
                       className="whitespace-nowrap px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50"
                       onClick={onSendPhoneSms}
-                      disabled={phoneCooldown > 0 || phoneSaving}
+                      disabled={phoneCooldown > 0 || phoneSaving || phoneSmsSending}
                     >
-                      {phoneCooldown > 0 ? `${phoneCooldown}秒后重发` : '获取验证码'}
+                      {phoneSmsSending ? '发送中…' : phoneCooldown > 0 ? `${phoneCooldown}秒后重发` : '获取验证码'}
                     </button>
                   </div>
                 </div>
