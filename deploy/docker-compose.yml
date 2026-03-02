@@ -50,6 +50,7 @@ services:
       ALIYUN_ACCESS_KEY_ID: ${ALIYUN_ACCESS_KEY_ID:-}
       ALIYUN_ACCESS_KEY_SECRET: ${ALIYUN_ACCESS_KEY_SECRET:-}
       ALIYUN_REGION_ID: ${ALIYUN_REGION_ID:-cn-hangzhou}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost}
     depends_on:
       db:
         condition: service_healthy
