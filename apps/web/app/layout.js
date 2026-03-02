@@ -3,8 +3,11 @@ import Layout from '../components/Layout';
 import ProgressBarProvider from '../components/ProgressBarProvider';
 
 export const metadata = {
-  title: 'My Blog',
-  description: 'A personal blog built with Next.js + Spring Boot',
+  title: 'AiNovel',
+  description: 'AI-powered novel writing platform',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({ children }) {

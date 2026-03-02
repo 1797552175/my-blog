@@ -59,6 +59,22 @@ ai:
     # AI预览章节缓存时间（小时），默认1小时
     ttl-hours: ${AI_PREVIEW_TTL_HOURS:1}
 
+# 短信认证（阿里云号码认证服务 - 短信认证，模板 100001～100005）
+sms:
+  enabled: ${SMS_ENABLED:false}
+  access-key-id: ${ALIYUN_ACCESS_KEY_ID:}
+  access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:}
+  sign-name: ${SMS_SIGN_NAME:}
+  region-id: ${ALIYUN_REGION_ID:cn-hangzhou}
+  template:
+    login-register: ${SMS_TEMPLATE_LOGIN_REGISTER:100001}
+    reset-password: ${SMS_TEMPLATE_RESET_PASSWORD:100003}
+    bind-phone: ${SMS_TEMPLATE_BIND_PHONE:100004}
+    verify-phone: ${SMS_TEMPLATE_VERIFY_PHONE:100005}
+    change-phone: ${SMS_TEMPLATE_CHANGE_PHONE:100002}
+  code-ttl-seconds: 300
+  send-interval-seconds: 60
+
 # JWT 配置（用于登录后生成/校验 Token）
 jwt:
   # JWT 签名密钥（强烈建议通过环境变量 JWT_SECRET 注入；生产必须是足够长的随机字符串）

@@ -43,7 +43,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/v3/api-docs/**").permitAll()
-                        .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/register", "/api/auth/login",
+                                "/api/auth/sms/send", "/api/auth/sms/login",
+                                "/api/auth/password/reset-request", "/api/auth/password/reset").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/posts").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/posts/{id:[\\d]+}").permitAll()

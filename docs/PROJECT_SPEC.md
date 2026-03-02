@@ -32,8 +32,13 @@
 | 模块     | 方法 | 路径                        | 认证 | 说明               |
 |----------|------|-----------------------------|------|--------------------|
 | 健康检查 | GET  | /api/health                 | 否   | 存活探针           |
-| 认证     | POST | /api/auth/register          | 否   | 注册               |
-| 认证     | POST | /api/auth/login             | 否   | 登录               |
+| 认证     | POST | /api/auth/register          | 否   | 注册（须手机+验证码） |
+| 认证     | POST | /api/auth/login             | 否   | 密码登录           |
+| 认证     | POST | /api/auth/sms/send          | 部分 | 发送短信验证码（绑定/换绑需认证） |
+| 认证     | POST | /api/auth/sms/login         | 否   | 验证码登录         |
+| 认证     | POST | /api/auth/password/reset-request | 否   | 重置密码-请求验证码 |
+| 认证     | POST | /api/auth/password/reset     | 否   | 重置密码-提交       |
+| 认证     | PUT  | /api/auth/me/phone          | 是   | 绑定/换绑手机号     |
 | 标签     | GET  | /api/tags                   | 否   | 全站标签列表(含次数) |
 | ~~文章~~ | ~~GET~~  | ~~/api/posts~~                  | ~~否~~   | ~~(已下线)~~ |
 | ~~文章~~ | ~~GET~~  | ~~/api/posts/slug/{slug}~~      | ~~否~~   | ~~(已下线)~~     |
@@ -85,7 +90,7 @@
 
 ### 2.3 数据模型（简要）
 
-- **User**：用户名、邮箱、密码（加密存储）
+- **User**：用户名、邮箱、手机号（可选）、密码（加密存储）
 - **Post**：标题、slug、正文（Markdown）、是否发布、标签（tags）、作者、灵感（inspiration，可选）、创建/更新时间
 - **Comment**：文章、用户（可选）、游客昵称/邮箱/网址、内容、创建时间
 - **Inspiration**：用户、标题、对话消息、optionSnapshot（小说方案快照，可选）；与 Post 可选关联（小说可记录来源灵感）
@@ -110,12 +115,13 @@
 | updated_at | TIMESTAMP | 非空 | 更新时间（插入/更新时写入） |
 | username | VARCHAR(32) | 非空、唯一 | 登录用户名 |
 | email | VARCHAR(128) | 非空、唯一 | 邮箱 |
+| phone | VARCHAR(20) | 可空、唯一 | 手机号（短信登录/绑定） |
 | password_hash | VARCHAR(255) | 非空 | 密码 BCrypt 加密后的密文 |
 | persona_prompt | TEXT | 可空 | 作者分身/人设提示词 |
 | persona_enabled | BIT(1) | 非空 | 是否启用作者分身 |
 | default_ai_model | VARCHAR(64) | 可空 | 默认使用的 AI 模型 |
 
-**索引**：idx_users_username（username，唯一）、idx_users_email（email，唯一）。
+**索引**：idx_users_username（username，唯一）、idx_users_email（email，唯一）、phone 唯一约束。
 
 ---
 

@@ -217,7 +217,21 @@ export default function MyStoriesPage() {
             <LoadingList items={3} />
           ) : filteredStories.length === 0 ? (
             <div className="p-12 text-center text-zinc-500 dark:text-zinc-400">
-              还没有小说，<Link href="/write" className="text-indigo-600 dark:text-indigo-400 hover:underline">写第一篇</Link>。
+              <div className="mb-4">
+                <svg className="h-16 w-16 mx-auto text-zinc-300 dark:text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-zinc-800 dark:text-zinc-200 mb-2">还没有小说</h3>
+              <p className="mb-6 max-w-md mx-auto text-sm text-zinc-600 dark:text-zinc-400">
+                开始创作你的第一部小说，AI 会帮助你构思情节和角色
+              </p>
+              <Link href="/write" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                写第一篇
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </Link>
             </div>
           ) : (
             filteredStories.map((story) => (

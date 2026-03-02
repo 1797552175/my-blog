@@ -4,11 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getStoryBySlug, listChaptersBySlug, createChapter, updateChapter, deleteChapter } from '../../../../services/stories';
+import { useToast } from '../../../../components/Toast';
+import ConfirmDialog from '../../../../components/ConfirmDialog';
 
 export default function ChapterManagePage() {
   const params = useParams();
   const router = useRouter();
   const slug = params?.slug;
+  const { addToast } = useToast();
 
   const [story, setStory] = useState(null);
   const [chapters, setChapters] = useState([]);
@@ -22,6 +25,9 @@ export default function ChapterManagePage() {
   // 新增状态
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState({ title: '', content: '', sortOrder: 1 });
+
+  // 确认弹窗状态
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null, chapter: null });
 
   useEffect(() => {
     if (!slug) return;
@@ -59,7 +65,7 @@ export default function ChapterManagePage() {
 
   async function saveEdit() {
     if (!editForm.title.trim()) {
-      alert('请输入章节标题');
+      addToast('请输入章节标题', 'warning');
       return;
     }
     try {
@@ -69,19 +75,30 @@ export default function ChapterManagePage() {
       });
       await loadData();
       cancelEdit();
+      addToast('保存成功', 'success');
     } catch (err) {
-      alert('保存失败：' + err.message);
+      addToast('保存失败：' + err.message, 'error');
     }
   }
 
   async function handleDelete(chapter) {
-    if (!confirm(`确定要删除章节「${chapter.title}」吗？`)) return;
-    try {
-      await deleteChapter(story.id, chapter.id);
-      await loadData();
-    } catch (err) {
-      alert('删除失败：' + err.message);
-    }
+    setConfirmDialog({
+      open: true,
+      title: '删除章节',
+      message: `确定要删除章节「${chapter.title}」吗？`,
+      chapter: chapter,
+      onConfirm: async () => {
+        try {
+          await deleteChapter(story.id, chapter.id);
+          await loadData();
+          addToast('删除成功', 'success');
+        } catch (err) {
+          addToast('删除失败：' + err.message, 'error');
+        } finally {
+          setConfirmDialog({ open: false, title: '', message: '', onConfirm: null, chapter: null });
+        }
+      }
+    });
   }
 
   function startAdd() {
@@ -100,7 +117,7 @@ export default function ChapterManagePage() {
 
   async function saveAdd() {
     if (!addForm.title.trim()) {
-      alert('请输入章节标题');
+      addToast('请输入章节标题', 'warning');
       return;
     }
     try {
@@ -111,8 +128,9 @@ export default function ChapterManagePage() {
       });
       await loadData();
       cancelAdd();
+      addToast('创建成功', 'success');
     } catch (err) {
-      alert('创建失败：' + err.message);
+      addToast('创建失败：' + err.message, 'error');
     }
   }
 
@@ -130,8 +148,9 @@ export default function ChapterManagePage() {
       await updateChapter(story.id, chapter.id, { sortOrder: targetChapter.sortOrder });
       await updateChapter(story.id, targetChapter.id, { sortOrder: chapter.sortOrder });
       await loadData();
+      addToast('移动成功', 'success');
     } catch (err) {
-      alert('移动失败：' + err.message);
+      addToast('移动失败：' + err.message, 'error');
     }
   }
 
@@ -329,6 +348,15 @@ export default function ChapterManagePage() {
           ))
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText="删除"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: null, chapter: null })}
+      />
     </div>
   );
 }

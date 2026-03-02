@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getMe, updateProfile, changePassword } from '../../../services/user';
-import { isAuthed } from '../../../services/auth';
+import { isAuthed, sendSms, bindPhone } from '../../../services/auth';
 import { getModels } from '../../../services/ai';
 
 export default function SettingsPage() {
@@ -40,6 +40,14 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const [phoneFormOpen, setPhoneFormOpen] = useState(false);
+  const [phoneValue, setPhoneValue] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneCooldown, setPhoneCooldown] = useState(0);
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const [phoneError, setPhoneError] = useState(null);
+  const [phoneSuccess, setPhoneSuccess] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -90,6 +98,12 @@ export default function SettingsPage() {
     })();
     return () => { cancelled = true; };
   }, [isMounted, isAuthenticated]);
+
+  useEffect(() => {
+    if (phoneCooldown <= 0) return;
+    const t = setInterval(() => setPhoneCooldown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [phoneCooldown]);
 
   async function onSaveProfile(e) {
     e.preventDefault();
@@ -158,6 +172,41 @@ export default function SettingsPage() {
       setModelError(err?.message ?? '保存失败');
     } finally {
       setModelSaving(false);
+    }
+  }
+
+  async function onSendPhoneSms() {
+    const p = phoneValue.replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(p)) {
+      setPhoneError('请输入正确的手机号');
+      return;
+    }
+    setPhoneError(null);
+    try {
+      const scene = profile?.phone ? 'CHANGE_PHONE' : 'BIND_PHONE';
+      await sendSms(p, scene);
+      setPhoneCooldown(60);
+    } catch (err) {
+      setPhoneError(err?.message ?? '发送验证码失败');
+    }
+  }
+
+  async function onSubmitPhone(e) {
+    e.preventDefault();
+    setPhoneError(null);
+    setPhoneSuccess(false);
+    setPhoneSaving(true);
+    try {
+      const data = await bindPhone({ phone: phoneValue.replace(/\s/g, ''), code: phoneCode });
+      setProfile(data);
+      setPhoneSuccess(true);
+      setPhoneFormOpen(false);
+      setPhoneValue('');
+      setPhoneCode('');
+    } catch (err) {
+      setPhoneError(err?.message ?? '操作失败');
+    } finally {
+      setPhoneSaving(false);
     }
   }
 
@@ -236,6 +285,98 @@ export default function SettingsPage() {
                 {profileSaving ? '保存中…' : '保存资料'}
               </button>
             </form>
+          </div>
+        </div>
+
+        {/* 手机号：绑定 / 换绑 */}
+        <div className="mb-8 bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 overflow-hidden transition-all duration-300 hover:shadow-md">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-zinc-900 dark:text-white">手机号</h2>
+              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+            {profile?.phone ? (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-2">
+                当前绑定：{profile.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')}
+              </p>
+            ) : (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">绑定手机号后可使用验证码登录、重置密码。</p>
+            )}
+            {phoneError ? (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+                {String(phoneError)}
+              </div>
+            ) : null}
+            {phoneSuccess ? (
+              <div className="mb-4 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+                {profile?.phone ? '换绑成功' : '绑定成功'}
+              </div>
+            ) : null}
+            {!phoneFormOpen ? (
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg font-medium transition-colors bg-amber-600 hover:bg-amber-700 text-white focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                onClick={() => { setPhoneFormOpen(true); setPhoneError(null); setPhoneSuccess(false); setPhoneValue(''); setPhoneCode(''); }}
+              >
+                {profile?.phone ? '换绑手机号' : '绑定手机号'}
+              </button>
+            ) : (
+              <form className="space-y-4" onSubmit={onSubmitPhone}>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">手机号</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                      value={phoneValue}
+                      onChange={(e) => setPhoneValue(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder="11 位手机号"
+                      maxLength={11}
+                    />
+                    <button
+                      type="button"
+                      className="whitespace-nowrap px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50"
+                      onClick={onSendPhoneSms}
+                      disabled={phoneCooldown > 0 || phoneSaving}
+                    >
+                      {phoneCooldown > 0 ? `${phoneCooldown}秒后重发` : '获取验证码'}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">验证码</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+                    value={phoneCode}
+                    onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6 位验证码"
+                    maxLength={6}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium disabled:opacity-50"
+                    disabled={phoneSaving}
+                  >
+                    {phoneSaving ? '提交中…' : '确认'}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    onClick={() => { setPhoneFormOpen(false); setPhoneError(null); }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
 

@@ -86,7 +86,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### POST /api/auth/register
 
-注册新用户。
+注册新用户。**须先通过短信验证码验证手机号**（使用「登录/注册」模板 100001）。
 
 **请求体**
 
@@ -94,14 +94,16 @@ Authorization: Bearer <JWT_TOKEN>
 |------------|--------|------|-------------------------|
 | username   | string | 是   | 3～32 字符              |
 | email      | string | 是   | 合法邮箱，最长 128 字符 |
-| password   | string | 是   | 6～72 字符              |
+| password   | string | 是   | 8～72 字符（满足密码强度） |
+| phone      | string | 是   | 11 位中国大陆手机号    |
+| smsCode    | string | 是   | 短信验证码（先调「发送验证码」获取） |
 
 **响应**
 
-- 成功：`201 Created`，无 body
+- 成功：`201 Created`，body 为 `{ "id", "username", "email" }`
 - 失败：
-  - `409 Conflict`：`{"error":"用户名已被使用"}` 或 `{"error":"邮箱已被使用"}`
-  - `400 Bad Request`：`{"error":"请检查输入", "fields": {...}}`
+  - `409 Conflict`：`{"error":"用户名已被使用"}`、`{"error":"邮箱已被使用"}`、`{"error":"该手机号已注册"}`
+  - `400 Bad Request`：`{"error":"请输入正确的手机号"}`、`{"error":"验证码错误或已过期"}`、`{"error":"请检查输入", "fields": {...}}`
 
 ---
 
@@ -131,6 +133,78 @@ Authorization: Bearer <JWT_TOKEN>
 
 ---
 
+### POST /api/auth/sms/send
+
+发送短信验证码。**无需认证**用于登录/注册、重置密码；**需认证**用于绑定/换绑手机（scene 为 BIND_PHONE、CHANGE_PHONE 时）。
+
+**请求体**
+
+| 字段  | 类型   | 必填 | 说明 |
+|-------|--------|------|------|
+| phone | string | 是   | 11 位手机号 |
+| scene | string | 是   | 场景：`LOGIN_REGISTER`、`RESET_PASSWORD`、`BIND_PHONE`、`VERIFY_PHONE`、`CHANGE_PHONE` |
+
+**响应**
+
+- 成功：`204 No Content`
+- 失败：`400` 手机号格式错误；`429` 发送过于频繁；`401` 绑定/换绑场景下未登录；`502` 短信服务异常
+
+---
+
+### POST /api/auth/sms/login
+
+验证码登录（手机号须已绑定账号）。
+
+**请求体**
+
+| 字段  | 类型   | 必填 | 说明 |
+|-------|--------|------|------|
+| phone | string | 是   | 11 位手机号 |
+| code  | string | 是   | 短信验证码 |
+
+**响应**
+
+- 成功：`200 OK`，body 同 `POST /api/auth/login`（`token`、`username`）
+- 失败：`401` 验证码错误或已过期、该手机号未绑定账号
+
+---
+
+### POST /api/auth/password/reset-request
+
+重置密码：向已绑定账号的手机号发送验证码（模板 100003）。
+
+**请求体**
+
+| 字段  | 类型   | 必填 | 说明 |
+|-------|--------|------|------|
+| phone | string | 是   | 11 位手机号 |
+
+**响应**
+
+- 成功：`204 No Content`
+- 失败：`400` 手机号格式错误；`404` 该手机号未绑定任何账号；`429` 发送过于频繁
+
+---
+
+### POST /api/auth/password/reset
+
+重置密码：校验验证码并设置新密码。
+
+**请求体**
+
+| 字段        | 类型   | 必填 | 说明 |
+|-------------|--------|------|------|
+| phone       | string | 是   | 11 位手机号 |
+| code        | string | 是   | 短信验证码 |
+| newPassword | string | 是   | 新密码，8～72 字符 |
+
+**响应**
+
+- 成功：`204 No Content`
+- 失败：`400` 验证码错误或已过期；`404` 该手机号未绑定任何账号
+
+---
+
 ### GET /api/auth/me
 
 获取当前登录用户信息。**需要认证**。
@@ -143,10 +217,16 @@ Authorization: Bearer <JWT_TOKEN>
 {
   "id": 1,
   "username": "alice",
-  "email": "alice@example.com"
+  "email": "alice@example.com",
+  "phone": "13800138000",
+  "personaPrompt": null,
+  "personaEnabled": true,
+  "defaultAiModel": "gpt-4o-mini",
+  "admin": false
 }
 ```
 
+- `phone` 为 null 表示未绑定手机。
 - 失败：`401 Unauthorized`（未带或无效 Token）
 
 ---
@@ -165,6 +245,24 @@ Authorization: Bearer <JWT_TOKEN>
 
 - 成功：`200 OK`，body 同 `GET /api/auth/me` 的 UserMeResponse
 - 失败：`409 Conflict`（如 `{"error":"邮箱已被使用"}`）；`400` 校验失败（`{"error":"请检查输入", "fields": {...}}`）；`401` 未认证（`{"error":"请先登录"}`）
+
+---
+
+### PUT /api/auth/me/phone
+
+绑定或换绑手机号。**需要认证**。先调用 `POST /api/auth/sms/send`（scene 为 `BIND_PHONE` 或 `CHANGE_PHONE`）获取验证码。
+
+**请求体**
+
+| 字段  | 类型   | 必填 | 说明 |
+|-------|--------|------|------|
+| phone | string | 是   | 11 位手机号 |
+| code  | string | 是   | 短信验证码 |
+
+**响应**
+
+- 成功：`200 OK`，body 同 `GET /api/auth/me`
+- 失败：`400` 手机号格式错误、验证码错误或已过期；`409` 该手机号已被其他账号绑定；`401` 未认证
 
 ---
 

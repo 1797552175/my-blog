@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.api.auth.dto.AuthResponse;
+import com.example.api.auth.dto.BindPhoneRequest;
 import com.example.api.auth.dto.ChangePasswordRequest;
 import com.example.api.auth.dto.LoginRequest;
 import com.example.api.auth.dto.RegisterRequest;
@@ -21,6 +22,8 @@ import com.example.api.auth.dto.UpdateProfileRequest;
 import com.example.api.auth.dto.UserMeResponse;
 import com.example.api.common.ApiException;
 import com.example.api.security.JwtTokenProvider;
+import com.example.api.sms.SmsScene;
+import com.example.api.sms.SmsService;
 import com.example.api.user.User;
 import com.example.api.user.UserRepository;
 
@@ -33,27 +36,41 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private static UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SmsService smsService;
 
     public AuthController(
             JwtTokenProvider jwtTokenProvider,
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            SmsService smsService) {
         this.jwtTokenProvider = jwtTokenProvider;
         AuthController.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.smsService = smsService;
     }
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
+        String phone = SmsService.normalizePhone(request.phone());
+        if (!SmsService.isValidChineseMobile(request.phone())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "请输入正确的手机号");
+        }
+        if (!smsService.verifyCode(phone, SmsScene.LOGIN_REGISTER, request.smsCode())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "验证码错误或已过期");
+        }
         if (userRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.CONFLICT, "用户名已被使用");
         }
         if (userRepository.existsByEmail(request.email())) {
             throw new ApiException(HttpStatus.CONFLICT, "邮箱已被使用");
         }
+        if (userRepository.existsByPhone(phone)) {
+            throw new ApiException(HttpStatus.CONFLICT, "该手机号已注册");
+        }
 
         User user = new User(request.username(), request.email(), passwordEncoder.encode(request.password()));
+        user.setPhone(phone);
         User savedUser = userRepository.save(user);
         return new RegisterResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail());
     }
@@ -78,6 +95,7 @@ public class AuthController {
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
+                user.getPhone(),
                 user.getPersonaPrompt(),
                 user.isPersonaEnabled(),
                 user.getDefaultAiModel(),
@@ -114,6 +132,35 @@ public class AuthController {
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
+                user.getPhone(),
+                user.getPersonaPrompt(),
+                user.isPersonaEnabled(),
+                user.getDefaultAiModel(),
+                user.isAdmin());
+    }
+
+    @PutMapping("/me/phone")
+    public UserMeResponse bindOrChangePhone(@Valid @RequestBody BindPhoneRequest request) {
+        User user = currentUser();
+        String phone = SmsService.normalizePhone(request.phone());
+        if (!SmsService.isValidChineseMobile(request.phone())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "请输入正确的手机号");
+        }
+        boolean isChange = user.getPhone() != null && !user.getPhone().isBlank();
+        SmsScene scene = isChange ? SmsScene.CHANGE_PHONE : SmsScene.BIND_PHONE;
+        if (!smsService.verifyCode(phone, scene, request.code())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "验证码错误或已过期");
+        }
+        if (userRepository.existsByPhone(phone) && !phone.equals(user.getPhone())) {
+            throw new ApiException(HttpStatus.CONFLICT, "该手机号已被其他账号绑定");
+        }
+        user.setPhone(phone);
+        userRepository.save(user);
+        return new UserMeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPhone(),
                 user.getPersonaPrompt(),
                 user.isPersonaEnabled(),
                 user.getDefaultAiModel(),

@@ -163,8 +163,21 @@ export default function PrNovelsPage() {
               <>
                 {myPrNovels.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <p>暂无分支小说</p>
-                    <p className="text-sm mt-2">在小说列表页点击"添加阅读并PR"创建</p>
+                    <div className="mb-4">
+                      <svg className="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">暂无分支小说</h3>
+                    <p className="mb-6 max-w-md mx-auto text-sm text-gray-600 dark:text-gray-400">
+                      从其他小说创建分支，添加你自己的创意和情节
+                    </p>
+                    <Link href="/stories" className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors">
+                      去小说库
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </Link>
                   </div>
                 ) : (
                   myPrNovels.map((novel) => (
@@ -237,8 +250,21 @@ export default function PrNovelsPage() {
               <>
                 {mySubmissions.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <p>暂无提交的PR</p>
-                    <p className="text-sm mt-2">在分支小说详情页点击"提交审核"提交给作者</p>
+                    <div className="mb-4">
+                      <svg className="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">暂无提交的PR</h3>
+                    <p className="mb-6 max-w-md mx-auto text-sm text-gray-600 dark:text-gray-400">
+                      完成你的分支小说后，提交给原作者审核
+                    </p>
+                    <Link href="/me/pr-novels" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                      查看我的分支
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </Link>
                   </div>
                 ) : (
                   mySubmissions.map((submission) => (
@@ -300,8 +326,21 @@ export default function PrNovelsPage() {
               <>
                 {receivedSubmissions.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    <p>暂无收到的PR</p>
-                    <p className="text-sm mt-2">当其他用户提交PR给你的小说时会显示在这里</p>
+                    <div className="mb-4">
+                      <svg className="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">暂无收到的PR</h3>
+                    <p className="mb-6 max-w-md mx-auto text-sm text-gray-600 dark:text-gray-400">
+                      其他用户可以从你的小说创建分支并提交审核
+                    </p>
+                    <Link href="/me/stories" className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors">
+                      查看我的小说
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </Link>
                   </div>
                 ) : (
                   receivedSubmissions.map((submission) => (

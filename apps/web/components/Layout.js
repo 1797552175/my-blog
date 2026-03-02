@@ -75,6 +75,9 @@ export default function Layout({ children }) {
     { name: '首页', href: '/' },
     { name: '小说库', href: '/stories' },
     { name: '写小说', href: '/write' },
+    { name: '我的小说', href: '/me/stories' },
+    { name: '我的阅读', href: '/me/reads' },
+    { name: '我的PR', href: '/me/pr-novels' },
   ];
 
   // 不再返回 null，而是始终渲染内容，避免首屏白屏
@@ -136,21 +139,6 @@ export default function Layout({ children }) {
                       <Menu.Items className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none">
                         <Menu.Item>
                           {({ active }) => (
-                            <Link href="/me/stories" className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200')}>我的小说</Link>
-                          )}
-                        </Menu.Item>
-                        <Menu.Item>
-                          {({ active }) => (
-                            <Link href="/me/reads" className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-amber-600 dark:text-amber-400')}>我的阅读</Link>
-                          )}
-                        </Menu.Item>
-                        <Menu.Item>
-                          {({ active }) => (
-                            <Link href="/me/pr-novels" className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200')}>我的PR</Link>
-                          )}
-                        </Menu.Item>
-                        <Menu.Item>
-                          {({ active }) => (
                             <Link href="/me/settings" className={classNames(active ? 'bg-gray-100 dark:bg-gray-700' : '', 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200')}>账号设置</Link>
                           )}
                         </Menu.Item>
@@ -195,11 +183,9 @@ export default function Layout({ children }) {
                 <Link key={link.name} href={link.href} className={classNames('block px-3 py-2 rounded-md text-base font-medium', pathname === link.href ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300')} onClick={() => setMobileMenuOpen(false)}>{link.name}</Link>
               ))}
               <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400">账号</div>
                 {isMounted && user ? (
                   <div className="px-2 space-y-1">
-                      <Link href="/me/stories" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>我的小说</Link>
-                      <Link href="/me/reads" className="block px-3 py-2 rounded-md text-base font-medium text-amber-600 dark:text-amber-400 hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => setMobileMenuOpen(false)}>我的阅读</Link>
-                      <Link href="/me/pr-novels" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>我的PR</Link>
                       <Link href="/me/settings" className="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300" onClick={() => setMobileMenuOpen(false)}>账号设置</Link>
                       <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300">退出登录</button>
                   </div>

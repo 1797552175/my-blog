@@ -6,16 +6,20 @@ import Link from 'next/link';
 import { isAuthed } from '../../../services/auth';
 import { listMyForks, deleteFork } from '../../../services/readerForks';
 import { LoadingSkeleton } from '../../../lib/loading';
+import { useToast } from '../../../components/Toast';
+import ConfirmDialog from '../../../components/ConfirmDialog';
 import { BookOpenIcon, ChevronRightIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 export default function MyReadsPage() {
   const router = useRouter();
+  const { addToast } = useToast();
   const [forks, setForks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null, forkId: null });
 
   useEffect(() => {
     setIsMounted(true);
@@ -48,19 +52,25 @@ export default function MyReadsPage() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!confirm('确定要移除这本小说吗？此操作不可恢复。')) {
-      return;
-    }
-
-    setDeletingId(forkId);
-    try {
-      await deleteFork(forkId);
-      setForks(forks.filter(f => f.id !== forkId));
-    } catch (err) {
-      setError(err?.message || '移除失败');
-    } finally {
-      setDeletingId(null);
-    }
+    setConfirmDialog({
+      open: true,
+      title: '移除小说',
+      message: '确定要移除这本小说吗？此操作不可恢复。',
+      forkId: forkId,
+      onConfirm: async () => {
+        setDeletingId(forkId);
+        try {
+          await deleteFork(forkId);
+          setForks(forks.filter(f => f.id !== forkId));
+          addToast('移除成功', 'success');
+        } catch (err) {
+          addToast(err?.message || '移除失败', 'error');
+        } finally {
+          setDeletingId(null);
+          setConfirmDialog({ open: false, title: '', message: '', onConfirm: null, forkId: null });
+        }
+      }
+    });
   };
 
   if (!isMounted || !isAuthenticated) {
@@ -191,6 +201,15 @@ export default function MyReadsPage() {
             </Link>
           </div>
         )}
+
+        <ConfirmDialog
+          open={confirmDialog.open}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmText="确认移除"
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog({ open: false, title: '', message: '', onConfirm: null, forkId: null })}
+        />
       </div>
     </div>
   );
