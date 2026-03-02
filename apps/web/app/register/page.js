@@ -9,7 +9,6 @@ export default function RegisterPage() {
   const router = useRouter();
 
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [smsCode, setSmsCode] = useState('');
@@ -83,7 +82,7 @@ export default function RegisterPage() {
     
     setLoading(true);
     try {
-      await register({ username, email, password, phone: phone.replace(/\s/g, ''), smsCode });
+      await register({ username, password, phone: phone.replace(/\s/g, ''), smsCode });
       setDone(true);
       setTimeout(() => router.push('/login'), 600);
     } catch (err) {
@@ -102,7 +101,6 @@ export default function RegisterPage() {
         <div className="card p-8 shadow-md">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold mb-2">注册</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">创建账号后即可登录写小说。</p>
           </div>
 
           {error ? (
@@ -123,6 +121,48 @@ export default function RegisterPage() {
           ) : null}
 
           <form className="space-y-5" onSubmit={onSubmit}>
+            <div>
+              <label className="label block mb-2" htmlFor="username">用户名</label>
+              <input 
+                id="username"
+                className="input" 
+                value={username} 
+                onChange={(e) => setUsername(e.target.value)} 
+                autoComplete="username" 
+                required 
+              />
+            </div>
+            <div>
+              <label className="label block mb-2" htmlFor="password">密码</label>
+              <input 
+                id="password"
+                className="input" 
+                type="password" 
+                value={password} 
+                onChange={handlePasswordChange} 
+                autoComplete="new-password" 
+                required 
+              />
+              {password && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>密码强度：</span>
+                    <span className={`font-medium ${passwordStrength.score >= 3 ? 'text-green-600' : 'text-red-600'}`}>
+                      {passwordStrength.message}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${passwordStrength.color} transition-all duration-300`}
+                      style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    密码需包含：大小写字母、数字和特殊字符，长度至少8位
+                  </div>
+                </div>
+              )}
+            </div>
             <div>
               <label className="label block mb-2" htmlFor="phone">手机号</label>
               <div className="flex gap-2">
@@ -160,60 +200,6 @@ export default function RegisterPage() {
                 maxLength={6}
                 required
               />
-            </div>
-            <div>
-              <label className="label block mb-2" htmlFor="username">用户名</label>
-              <input 
-                id="username"
-                className="input" 
-                value={username} 
-                onChange={(e) => setUsername(e.target.value)} 
-                autoComplete="username" 
-                required 
-              />
-            </div>
-            <div>
-              <label className="label block mb-2" htmlFor="email">邮箱</label>
-              <input 
-                id="email"
-                className="input" 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                autoComplete="email" 
-                required 
-              />
-            </div>
-            <div>
-              <label className="label block mb-2" htmlFor="password">密码</label>
-              <input 
-                id="password"
-                className="input" 
-                type="password" 
-                value={password} 
-                onChange={handlePasswordChange} 
-                autoComplete="new-password" 
-                required 
-              />
-              {password && (
-                <div className="mt-2">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span>密码强度：</span>
-                    <span className={`font-medium ${passwordStrength.score >= 3 ? 'text-green-600' : 'text-red-600'}`}>
-                      {passwordStrength.message}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${passwordStrength.color} transition-all duration-300`}
-                      style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    密码需包含：大小写字母、数字和特殊字符，长度至少8位
-                  </div>
-                </div>
-              )}
             </div>
             <button className="btn w-full py-3" disabled={loading}>
               {loading ? '注册中…' : '注册'}

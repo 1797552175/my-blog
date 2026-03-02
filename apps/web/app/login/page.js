@@ -94,7 +94,6 @@ export default function LoginPage() {
         <div className="card p-8 shadow-md">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold mb-2">登录</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">使用你的账号登录后即可写小说。</p>
           </div>
 
           <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-600 p-0.5 mb-6">
